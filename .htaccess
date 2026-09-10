@@ -1,0 +1,10 @@
+Options -Indexes
+RewriteEngine On
+
+# Block access to sensitive files
+RewriteRule ^(config|db|auth|post|view|image|api)\.php$ - [F,L]
+RewriteRule ^data/ - [F,L]
+
+# Route everything through index.php (skip actual files)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [L]
