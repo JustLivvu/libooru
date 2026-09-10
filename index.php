@@ -272,7 +272,7 @@ function page_posts(?array $user): void
 
     echo '<p>' . $result['total'] . ' posts</p>';
     View::postGrid($result['posts']);
-    View::paginator($page, $result['pages'], '/posts', array_filter(['q' => $q, 'rating' => $rating, 'order' => $order]));
+    View::paginator($page, $result['pages'], '/posts', array_filter(['q' => $q, 'rating' => $rating, 'order' => $order, 'quality' => $quality]));
     View::footer();
 }
 

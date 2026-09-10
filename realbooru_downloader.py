@@ -198,12 +198,15 @@ class Database:
         tags: list of tag names
         Returns post_id
         """
+        if 'quality' not in post_data:
+            post_data['quality'] = determine_quality(post_data.get('width'), post_data.get('height'))
+
         with self.lock:
             if self.use_native:
                 cur = self.conn.cursor()
                 cur.execute("""
-                    INSERT INTO posts (user_id, filename, ext, mime, filesize, width, height, md5, rating, source, title)
-                    VALUES (1, :filename, :ext, :mime, :filesize, :width, :height, :md5, :rating, :source, :title)
+                    INSERT INTO posts (user_id, filename, ext, mime, filesize, width, height, md5, rating, source, title, quality)
+                    VALUES (1, :filename, :ext, :mime, :filesize, :width, :height, :md5, :rating, :source, :title, :quality)
                 """, post_data)
                 post_id = cur.lastrowid
 
@@ -233,8 +236,8 @@ class Database:
                 $tags = json_decode($argv[3], true);
 
                 $st = $db->prepare('
-                    INSERT INTO posts (user_id, filename, ext, mime, filesize, width, height, md5, rating, source, title)
-                    VALUES (1, :filename, :ext, :mime, :filesize, :width, :height, :md5, :rating, :source, :title)
+                    INSERT INTO posts (user_id, filename, ext, mime, filesize, width, height, md5, rating, source, title, quality)
+                    VALUES (1, :filename, :ext, :mime, :filesize, :width, :height, :md5, :rating, :source, :title, :quality)
                 ');
                 $st->execute([
                     ':filename' => $p['filename'],
@@ -247,6 +250,7 @@ class Database:
                     ':rating'   => $p['rating'],
                     ':source'   => $p['source'],
                     ':title'    => $p['title'],
+                    ':quality'  => $p['quality'],
                 ]);
                 $postId = (int)$db->lastInsertId();
 
@@ -278,6 +282,19 @@ class Database:
 # -----------------------------------------------------------------------------
 # Image & Video Utilities (Dimensions and Thumbnails)
 # -----------------------------------------------------------------------------
+
+def determine_quality(w, h):
+    if not w or not h:
+        return 'medium'
+    max_d = max(w, h)
+    min_d = min(w, h)
+    if max_d >= 3840 or min_d >= 2160:
+        return 'ultra'
+    if max_d >= 1920 or min_d >= 1080:
+        return 'high'
+    if max_d >= 1280 or min_d >= 720:
+        return 'medium'
+    return 'low'
 
 def process_image(src_path, dst_thumb_path, max_w=150, max_h=150):
     """

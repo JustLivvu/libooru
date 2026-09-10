@@ -90,6 +90,7 @@ class DB
             CREATE INDEX IF NOT EXISTS idx_post_tags_post ON post_tags(post_id);
             CREATE INDEX IF NOT EXISTS idx_post_tags_tag  ON post_tags(tag_id);
             CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
+            CREATE INDEX IF NOT EXISTS idx_posts_quality  ON posts(quality);
         ");
 
         // Add quality column if it doesn't exist yet (migration)
@@ -101,6 +102,17 @@ class DB
         if (!$hasQuality) {
             $pdo->exec("ALTER TABLE posts ADD COLUMN quality TEXT NOT NULL DEFAULT 'medium'");
         }
+
+        // Auto-calculate quality for posts based on resolution (width & height)
+        $pdo->exec("
+            UPDATE posts SET quality = CASE 
+                WHEN max(COALESCE(width,0), COALESCE(height,0)) >= 3840 OR min(COALESCE(width,0), COALESCE(height,0)) >= 2160 THEN 'ultra'
+                WHEN max(COALESCE(width,0), COALESCE(height,0)) >= 1920 OR min(COALESCE(width,0), COALESCE(height,0)) >= 1080 THEN 'high'
+                WHEN max(COALESCE(width,0), COALESCE(height,0)) >= 1280 OR min(COALESCE(width,0), COALESCE(height,0)) >= 720 THEN 'medium'
+                ELSE 'low'
+            END
+            WHERE width IS NOT NULL AND height IS NOT NULL;
+        ");
 
         // Seed admin user if no users exist
         $count = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();

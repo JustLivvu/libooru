@@ -22,23 +22,26 @@ class Post
         return $post;
     }
 
+    public static function determineQuality(?int $w, ?int $h): string
+    {
+        if (!$w || !$h) return 'medium';
+        $max = max($w, $h);
+        $min = min($w, $h);
+        if ($max >= 3840 || $min >= 2160) return 'ultra';
+        if ($max >= 1920 || $min >= 1080) return 'high';
+        if ($max >= 1280 || $min >= 720)  return 'medium';
+        return 'low';
+    }
+
     public static function list(int $page, int $perPage, array $tagFilter = [], string $rating = '', string $order = 'id DESC', string $quality = ''): array
     {
         $offset = max(0, $page - 1) * $perPage;
-
-        // Translate quality label -> height SQL fragment
-        $qualitySql = match($quality) {
-            'low'    => '(p.height IS NOT NULL AND p.height < 720)',
-            'medium' => '(p.height >= 720 AND p.height < 1080)',
-            'high'   => '(p.height >= 1080 AND p.height < 2160)',
-            'ultra'  => '(p.height >= 2160)',
-            default  => '',
-        };
+        $validQuality = in_array($quality, ['low', 'medium', 'high', 'ultra'], true) ? $quality : '';
 
         if ($tagFilter) {
             // Intersection: posts that have ALL given tags
             $placeholders = implode(',', array_fill(0, count($tagFilter), '?'));
-            $qualityAnd   = $qualitySql ? "AND $qualitySql" : '';
+            $qualityAnd   = $validQuality ? "AND p.quality = ?" : '';
             $sql = "
                 SELECT p.* FROM posts p
                 INNER JOIN post_tags pt ON pt.post_id = p.id
@@ -52,7 +55,8 @@ class Post
                 LIMIT ? OFFSET ?
             ";
             $params = $tagFilter;
-            if ($rating) $params[] = $rating;
+            if ($rating)       $params[] = $rating;
+            if ($validQuality) $params[] = $validQuality;
             $params[] = $perPage;
             $params[] = $offset;
 
@@ -68,21 +72,25 @@ class Post
                     HAVING COUNT(DISTINCT t.id) = " . count($tagFilter) . "
                 )";
             $countParams = $tagFilter;
-            if ($rating) $countParams[] = $rating;
+            if ($rating)       $countParams[] = $rating;
+            if ($validQuality) $countParams[] = $validQuality;
         } else {
             $conditions = [];
-            if ($rating)    $conditions[] = 'rating = ?';
-            if ($qualitySql) $conditions[] = $qualitySql;
+            if ($rating)       $conditions[] = 'rating = ?';
+            if ($validQuality) $conditions[] = 'quality = ?';
             $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
 
             $sql = "SELECT * FROM posts{$where} ORDER BY $order LIMIT ? OFFSET ?";
             $params = [];
-            if ($rating) $params[] = $rating;
+            if ($rating)       $params[] = $rating;
+            if ($validQuality) $params[] = $validQuality;
             $params[] = $perPage;
             $params[] = $offset;
 
             $countSql    = "SELECT COUNT(*) FROM posts{$where}";
-            $countParams = $rating ? [$rating] : [];
+            $countParams = [];
+            if ($rating)       $countParams[] = $rating;
+            if ($validQuality) $countParams[] = $validQuality;
         }
 
         $posts = DB::rows($sql, $params);
@@ -173,6 +181,7 @@ class Post
         chmod($destPath, 0644);
 
         [$w, $h] = Image::getDimensions($destPath, $mime);
+        $quality = self::determineQuality($w ?: null, $h ?: null);
 
         // Make thumbnail
         Image::makeThumbnail($destPath, Image::thumbPath($filename), $mime);
@@ -181,8 +190,8 @@ class Post
         $rating = in_array($meta['rating'] ?? '', ['s', 'q', 'e'], true) ? $meta['rating'] : 'q';
 
         DB::exec(
-            'INSERT INTO posts (user_id, filename, ext, mime, filesize, width, height, md5, rating, source, title)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO posts (user_id, filename, ext, mime, filesize, width, height, md5, rating, source, title, quality)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $userId,
                 $filename,
@@ -195,6 +204,7 @@ class Post
                 $rating,
                 trim($meta['source'] ?? '') ?: null,
                 trim($meta['title'] ?? '') ?: null,
+                $quality,
             ]
         );
         $postId = (int)DB::lastId();

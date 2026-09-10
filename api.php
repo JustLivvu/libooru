@@ -129,12 +129,13 @@ class Api
 
     private function getPosts(): void
     {
-        $page   = max(1, (int)($_GET['page'] ?? 1));
-        $limit  = min(100, max(1, (int)($_GET['limit'] ?? POSTS_PER_PAGE)));
-        $tags   = array_filter(preg_split('/[\s,]+/', trim($_GET['tags'] ?? ''), -1, PREG_SPLIT_NO_EMPTY));
-        $rating = $_GET['rating'] ?? '';
+        $page    = max(1, (int)($_GET['page'] ?? 1));
+        $limit   = min(100, max(1, (int)($_GET['limit'] ?? POSTS_PER_PAGE)));
+        $tags    = array_filter(preg_split('/[\s,]+/', trim($_GET['tags'] ?? ''), -1, PREG_SPLIT_NO_EMPTY));
+        $rating  = $_GET['rating'] ?? '';
+        $quality = $_GET['quality'] ?? '';
 
-        $result = Post::list($page, $limit, $tags, $rating);
+        $result = Post::list($page, $limit, $tags, $rating, 'id DESC', $quality);
         echo json_encode([
             'posts'   => $result['posts'],
             'total'   => $result['total'],
