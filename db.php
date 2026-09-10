@@ -86,12 +86,27 @@ class DB
                 PRIMARY KEY (user_id, post_id)
             );
 
+            CREATE TABLE IF NOT EXISTS site_settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT ''
+            );
+
             CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_post_tags_post ON post_tags(post_id);
             CREATE INDEX IF NOT EXISTS idx_post_tags_tag  ON post_tags(tag_id);
             CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
             CREATE INDEX IF NOT EXISTS idx_posts_quality  ON posts(quality);
         ");
+
+        // Add blacklist column to users if missing
+        $userCols = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
+        $hasBlacklist = false;
+        foreach ($userCols as $col) {
+            if ($col['name'] === 'blacklist') { $hasBlacklist = true; break; }
+        }
+        if (!$hasBlacklist) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN blacklist TEXT NOT NULL DEFAULT ''");
+        }
 
         // Add quality column if it doesn't exist yet (migration)
         $cols = $pdo->query('PRAGMA table_info(posts)')->fetchAll(PDO::FETCH_ASSOC);

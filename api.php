@@ -149,6 +149,16 @@ class Api
     {
         $post = Post::getById($id);
         if (!$post) throw new RuntimeException('Post not found', 404);
+
+        $user = Auth::current();
+        if ($user && !empty($user['blacklist'])) {
+            $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+            $postTagNames = array_map(fn($t) => strtolower($t['name']), $post['tags']);
+            if (array_intersect($blacklisted, $postTagNames)) {
+                throw new RuntimeException('Post not found', 404);
+            }
+        }
+
         $post['comments'] = Post::commentsFor($id);
         echo json_encode($post);
     }
@@ -204,19 +214,32 @@ class Api
         $q      = trim($_GET['q'] ?? '');
         $offset = ($page - 1) * $limit;
 
+        $user = Auth::current();
+        $blacklisted = [];
+        if ($user && !empty($user['blacklist'])) {
+            $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+        }
+        $notInSql = '';
+        $notInParams = [];
+        if ($blacklisted) {
+            $notInPlaceholders = implode(',', array_fill(0, count($blacklisted), '?'));
+            $notInSql = " AND name NOT IN ($notInPlaceholders) COLLATE NOCASE";
+            $notInParams = $blacklisted;
+        }
+
         if ($q !== '') {
-            $tags  = DB::rows('SELECT name, count FROM tags WHERE name LIKE ? ORDER BY count DESC LIMIT ? OFFSET ?', ['%' . $q . '%', $limit, $offset]);
-            $total = (int)DB::scalar('SELECT COUNT(*) FROM tags WHERE name LIKE ?', ['%' . $q . '%']);
+            $tags  = DB::rows('SELECT name, count FROM tags WHERE name LIKE ?' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge(['%' . $q . '%'], $notInParams, [$limit, $offset]));
+            $total = (int)DB::scalar('SELECT COUNT(*) FROM tags WHERE name LIKE ?' . $notInSql, array_merge(['%' . $q . '%'], $notInParams));
         } else {
-            $tags  = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT ? OFFSET ?', [$limit, $offset]);
-            $total = (int)DB::scalar('SELECT COUNT(*) FROM tags');
+            $tags  = DB::rows('SELECT name, count FROM tags WHERE 1=1' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge($notInParams, [$limit, $offset]));
+            $total = (int)DB::scalar('SELECT COUNT(*) FROM tags WHERE 1=1' . $notInSql, $notInParams);
         }
         echo json_encode(['tags' => $tags, 'total' => $total]);
     }
 
     private function tagsAutocomplete(): void
     {
-        // Public endpoint — no auth required
+        // Public endpoint — no auth required, but check for user blacklist if logged in
         $q     = trim($_GET['q'] ?? '');
         $limit = min(10, max(1, (int)($_GET['limit'] ?? 8)));
 
@@ -225,25 +248,37 @@ class Api
             return;
         }
 
+        $user = Auth::current();
+        $blacklisted = [];
+        if ($user && !empty($user['blacklist'])) {
+            $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+        }
+
+        $notInSql = '';
+        $notInParams = [];
+        if ($blacklisted) {
+            $notInPlaceholders = implode(',', array_fill(0, count($blacklisted), '?'));
+            $notInSql = " AND name NOT IN ($notInPlaceholders) COLLATE NOCASE";
+            $notInParams = $blacklisted;
+        }
+
         // Match tags that START WITH the query first, then others
-        $tags = DB::rows(
-            'SELECT name, count FROM tags
-             WHERE name LIKE ?
-             ORDER BY (CASE WHEN name LIKE ? THEN 0 ELSE 1 END), count DESC
-             LIMIT ?',
-            [$q . '%', $q . '%', $limit]
-        );
+        $sql1 = 'SELECT name, count FROM tags
+                 WHERE name LIKE ?' . $notInSql . '
+                 ORDER BY (CASE WHEN name LIKE ? THEN 0 ELSE 1 END), count DESC
+                 LIMIT ?';
+        $params1 = array_merge([$q . '%'], $notInParams, [$q . '%', $limit]);
+        $tags = DB::rows($sql1, $params1);
 
         // If not enough results, also look for tags containing the query anywhere
         if (count($tags) < $limit) {
             $found = array_column($tags, 'name');
-            $extra = DB::rows(
-                'SELECT name, count FROM tags
-                 WHERE name LIKE ? AND name NOT LIKE ?
-                 ORDER BY count DESC
-                 LIMIT ?',
-                ['%' . $q . '%', $q . '%', $limit - count($tags)]
-            );
+            $sql2 = 'SELECT name, count FROM tags
+                     WHERE name LIKE ? AND name NOT LIKE ?' . $notInSql . '
+                     ORDER BY count DESC
+                     LIMIT ?';
+            $params2 = array_merge(['%' . $q . '%', $q . '%'], $notInParams, [$limit - count($tags)]);
+            $extra = DB::rows($sql2, $params2);
             $tags = array_merge($tags, $extra);
         }
 

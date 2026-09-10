@@ -195,7 +195,7 @@ function page_home(?array $user): void
         echo '    <a href="' . View::url('/user/' . rawurlencode($user['name'])) . '">My Account</a>';
         echo '    <a href="' . View::url('/settings') . '">Settings</a>';
         if ($user['role'] === 'admin') {
-            echo '    <a href="' . View::url('/admin') . '">Admin</a>';
+            echo '    <a href="' . View::url('/admin') . '">Panel</a>';
         }
         echo '    <a href="' . View::url('/logout') . '">Logout</a>';
     } else {
@@ -242,7 +242,7 @@ function page_posts(?array $user): void
     $tags   = $q ? preg_split('/[\s,]+/', $q, -1, PREG_SPLIT_NO_EMPTY) : [];
     $result = Post::list($page, POSTS_PER_PAGE, $tags, $rating, $order, $quality);
 
-    $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 20');
+    $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 50');
 
     View::header('Browse Posts', $user, $sidebarTags);
     View::flash();
@@ -282,6 +282,17 @@ function page_post(?array $user, int $id): void
         echo '<h1>Post not found</h1>';
         View::footer();
         return;
+    }
+    if ($user && !empty($user['blacklist'])) {
+        $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+        $postTagNames = array_map(fn($t) => strtolower($t['name']), $post['tags']);
+        if (array_intersect($blacklisted, $postTagNames)) {
+            http_response_code(404);
+            View::header('Not Found', $user);
+            echo '<h1>Post not found</h1>';
+            View::footer();
+            return;
+        }
     }
     $comments = Post::commentsFor($id);
     $tags     = $post['tags'];
@@ -536,12 +547,24 @@ function page_tags(?array $user): void
     $limit  = 50;
     $offset = ($page - 1) * $limit;
 
+    $blacklisted = [];
+    if ($user && !empty($user['blacklist'])) {
+        $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+    }
+    $notInSql = '';
+    $notInParams = [];
+    if ($blacklisted) {
+        $notInPlaceholders = implode(',', array_fill(0, count($blacklisted), '?'));
+        $notInSql = " AND name NOT IN ($notInPlaceholders) COLLATE NOCASE";
+        $notInParams = $blacklisted;
+    }
+
     if ($q !== '') {
-        $tags  = DB::rows('SELECT name, count FROM tags WHERE name LIKE ? ORDER BY count DESC LIMIT ? OFFSET ?', ['%' . $q . '%', $limit, $offset]);
-        $total = (int)DB::scalar('SELECT COUNT(*) FROM tags WHERE name LIKE ?', ['%' . $q . '%']);
+        $tags  = DB::rows('SELECT name, count FROM tags WHERE name LIKE ?' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge(['%' . $q . '%'], $notInParams, [$limit, $offset]));
+        $total = (int)DB::scalar('SELECT COUNT(*) FROM tags WHERE name LIKE ?' . $notInSql, array_merge(['%' . $q . '%'], $notInParams));
     } else {
-        $tags  = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT ? OFFSET ?', [$limit, $offset]);
-        $total = (int)DB::scalar('SELECT COUNT(*) FROM tags');
+        $tags  = DB::rows('SELECT name, count FROM tags WHERE 1=1' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge($notInParams, [$limit, $offset]));
+        $total = (int)DB::scalar('SELECT COUNT(*) FROM tags WHERE 1=1' . $notInSql, $notInParams);
     }
     $pages = (int)ceil($total / $limit);
 
@@ -669,7 +692,7 @@ function page_favorites(?array $user): void
     $page   = max(1, (int)($_GET['page'] ?? 1));
     $result = Post::listFavorites((int)$user['id'], $page, POSTS_PER_PAGE);
 
-    $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 20');
+    $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 50');
     View::header('Favorites', $user, $sidebarTags);
     View::flash();
     echo '<h1>My Favorites</h1>';
@@ -704,12 +727,14 @@ function page_admin(?array $user, string $method): void
             DB::exec('UPDATE users SET api_key = ? WHERE id = ?', [$key, $uid]);
             View::setFlash('API key regenerated.', 'ok');
         } elseif ($action === 'site_settings') {
-            $name   = trim($_POST['site_name'] ?? '');
-            $logo   = trim($_POST['site_logo'] ?? '');
-            $banner = trim($_POST['site_banner'] ?? '');
+            $name    = trim($_POST['site_name'] ?? '');
+            $logo    = trim($_POST['site_logo'] ?? '');
+            $banner  = trim($_POST['site_banner'] ?? '');
+            $default = trim($_POST['default_blacklist'] ?? '');
             if ($name !== '') View::setSiteSetting('site_name', $name);
             View::setSiteSetting('site_logo',   $logo);
             View::setSiteSetting('site_banner', $banner);
+            View::setSiteSetting('default_blacklist', $default);
             View::setFlash('Site settings saved.', 'ok');
         }
 
@@ -721,13 +746,14 @@ function page_admin(?array $user, string $method): void
     $tagCount     = (int)DB::scalar('SELECT COUNT(*) FROM tags');
     $commentCount = (int)DB::scalar('SELECT COUNT(*) FROM comments');
 
-    $curName   = View::siteSetting('site_name', SITE_NAME);
-    $curLogo   = View::siteSetting('site_logo');
-    $curBanner = View::siteSetting('site_banner');
+    $curName             = View::siteSetting('site_name', SITE_NAME);
+    $curLogo             = View::siteSetting('site_logo');
+    $curBanner           = View::siteSetting('site_banner');
+    $curDefaultBlacklist = View::siteSetting('default_blacklist', '');
 
-    View::header('Admin', $user);
+    View::header('Panel', $user);
     View::flash();
-    echo '<h1>Admin</h1>';
+    echo '<h1>Panel</h1>';
 
     // Stats
     echo '<h2>Statistics</h2>';
@@ -747,6 +773,7 @@ function page_admin(?array $user, string $method): void
     echo '<label>Site name<br><input name="site_name" value="' . View::e($curName) . '" style="width:100%"></label><br><br>';
     echo '<label>Logo URL <small>(small icon, ~32px tall)</small><br><input name="site_logo" value="' . View::e($curLogo) . '" style="width:100%" placeholder="https://…"></label><br><br>';
     echo '<label>Banner URL <small>(used instead of logo, ~40px tall)</small><br><input name="site_banner" value="' . View::e($curBanner) . '" style="width:100%" placeholder="https://…"></label><br><br>';
+    echo '<label>Default Blacklist Tags for New Users <small>(space or line separated)</small><br><textarea name="default_blacklist" rows="2" style="width:100%" placeholder="e.g. nsfw gore">' . View::e($curDefaultBlacklist) . '</textarea></label><br><br>';
     echo '<button>Save Settings</button>';
     echo '</form>';
 
@@ -840,6 +867,12 @@ function page_settings(?array $user, string $method): void
             DB::exec('UPDATE users SET api_key = ? WHERE id = ?', ['', (int)$user['id']]);
             View::setFlash('API key deleted.', 'ok');
             Router::redirect('/settings');
+
+        } elseif ($action === 'save_blacklist') {
+            $blacklist = trim($_POST['blacklist'] ?? '');
+            DB::exec('UPDATE users SET blacklist = ? WHERE id = ?', [$blacklist, (int)$user['id']]);
+            View::setFlash('Blacklist updated.', 'ok');
+            Router::redirect('/settings');
         }
     }
 
@@ -853,8 +886,19 @@ function page_settings(?array $user, string $method): void
 
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
 
+    // Tag Blacklist
+    echo '<h2>Tag Blacklist</h2>';
+    echo '<p style="color:var(--muted-text);font-size:12px">Tags listed here will be hidden from top tags in the left sidebar.</p>';
+    echo '<form method="post" style="max-width:400px">';
+    View::csrfField();
+    echo '<input type="hidden" name="action" value="save_blacklist">';
+    echo '<label>Blacklisted tags <small>(space or line separated)</small><br>';
+    echo '<textarea name="blacklist" rows="3" style="width:100%" placeholder="e.g. tag1 tag2">' . View::e($user['blacklist'] ?? '') . '</textarea></label><br><br>';
+    echo '<button>Save Blacklist</button>';
+    echo '</form>';
+
     // Change password
-    echo '<h2>Change Password</h2>';
+    echo '<h2 style="margin-top:30px">Change Password</h2>';
     echo '<form method="post" style="max-width:400px">';
     View::csrfField();
     echo '<input type="hidden" name="action" value="change_password">';

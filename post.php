@@ -38,17 +38,35 @@ class Post
         $offset = max(0, $page - 1) * $perPage;
         $validQuality = in_array($quality, ['low', 'medium', 'high', 'ultra'], true) ? $quality : '';
 
+        $user = class_exists('Auth') ? Auth::current() : null;
+        $blacklist = [];
+        if ($user && !empty($user['blacklist'])) {
+            $blacklist = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+        }
+
+        $blSql = '';
+        $blParams = [];
+        if ($blacklist) {
+            $blPlaceholders = implode(',', array_fill(0, count($blacklist), '?'));
+            $blSql = "p.id NOT IN (SELECT pt_bl.post_id FROM post_tags pt_bl INNER JOIN tags t_bl ON t_bl.id = pt_bl.tag_id WHERE t_bl.name IN ($blPlaceholders) COLLATE NOCASE)";
+            $blParams = $blacklist;
+        }
+
         if ($tagFilter) {
             // Intersection: posts that have ALL given tags
             $placeholders = implode(',', array_fill(0, count($tagFilter), '?'));
             $qualityAnd   = $validQuality ? "AND p.quality = ?" : '';
+            $ratingAnd    = $rating ? "AND p.rating = ?" : '';
+            $blAnd        = $blSql ? "AND $blSql" : '';
+
             $sql = "
                 SELECT p.* FROM posts p
                 INNER JOIN post_tags pt ON pt.post_id = p.id
                 INNER JOIN tags t ON t.id = pt.tag_id
                 WHERE t.name IN ($placeholders) COLLATE NOCASE
-                " . ($rating ? "AND p.rating = ?" : "") . "
+                $ratingAnd
                 $qualityAnd
+                $blAnd
                 GROUP BY p.id
                 HAVING COUNT(DISTINCT t.id) = " . count($tagFilter) . "
                 ORDER BY p.$order
@@ -57,6 +75,7 @@ class Post
             $params = $tagFilter;
             if ($rating)       $params[] = $rating;
             if ($validQuality) $params[] = $validQuality;
+            if ($blParams)     $params = array_merge($params, $blParams);
             $params[] = $perPage;
             $params[] = $offset;
 
@@ -66,31 +85,36 @@ class Post
                     INNER JOIN post_tags pt ON pt.post_id = p.id
                     INNER JOIN tags t ON t.id = pt.tag_id
                     WHERE t.name IN ($placeholders) COLLATE NOCASE
-                    " . ($rating ? "AND p.rating = ?" : "") . "
+                    $ratingAnd
                     $qualityAnd
+                    $blAnd
                     GROUP BY p.id
                     HAVING COUNT(DISTINCT t.id) = " . count($tagFilter) . "
                 )";
             $countParams = $tagFilter;
             if ($rating)       $countParams[] = $rating;
             if ($validQuality) $countParams[] = $validQuality;
+            if ($blParams)     $countParams = array_merge($countParams, $blParams);
         } else {
             $conditions = [];
-            if ($rating)       $conditions[] = 'rating = ?';
-            if ($validQuality) $conditions[] = 'quality = ?';
+            if ($rating)       $conditions[] = 'p.rating = ?';
+            if ($validQuality) $conditions[] = 'p.quality = ?';
+            if ($blSql)        $conditions[] = $blSql;
             $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
 
-            $sql = "SELECT * FROM posts{$where} ORDER BY $order LIMIT ? OFFSET ?";
+            $sql = "SELECT p.* FROM posts p{$where} ORDER BY p.$order LIMIT ? OFFSET ?";
             $params = [];
             if ($rating)       $params[] = $rating;
             if ($validQuality) $params[] = $validQuality;
+            if ($blParams)     $params = array_merge($params, $blParams);
             $params[] = $perPage;
             $params[] = $offset;
 
-            $countSql    = "SELECT COUNT(*) FROM posts{$where}";
+            $countSql    = "SELECT COUNT(*) FROM posts p{$where}";
             $countParams = [];
             if ($rating)       $countParams[] = $rating;
             if ($validQuality) $countParams[] = $validQuality;
+            if ($blParams)     $countParams = array_merge($countParams, $blParams);
         }
 
         $posts = DB::rows($sql, $params);
@@ -334,18 +358,34 @@ class Post
     public static function listFavorites(int $userId, int $page, int $perPage): array
     {
         $offset = max(0, $page - 1) * $perPage;
-        $posts = DB::rows(
-            'SELECT p.* FROM posts p
-             INNER JOIN favorites f ON f.post_id = p.id
-             WHERE f.user_id = ?
-             ORDER BY f.created_at DESC
-             LIMIT ? OFFSET ?',
-            [$userId, $perPage, $offset]
-        );
-        $total = (int)(DB::scalar(
-            'SELECT COUNT(*) FROM favorites WHERE user_id = ?',
-            [$userId]
-        ) ?: 0);
+
+        $user = class_exists('Auth') ? Auth::current() : null;
+        $blacklist = [];
+        if ($user && !empty($user['blacklist'])) {
+            $blacklist = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+        }
+        $blSql = '';
+        $blParams = [];
+        if ($blacklist) {
+            $blPlaceholders = implode(',', array_fill(0, count($blacklist), '?'));
+            $blSql = "AND p.id NOT IN (SELECT pt_bl.post_id FROM post_tags pt_bl INNER JOIN tags t_bl ON t_bl.id = pt_bl.tag_id WHERE t_bl.name IN ($blPlaceholders) COLLATE NOCASE)";
+            $blParams = $blacklist;
+        }
+
+        $sql = 'SELECT p.* FROM posts p
+                INNER JOIN favorites f ON f.post_id = p.id
+                WHERE f.user_id = ? ' . $blSql . '
+                ORDER BY f.created_at DESC
+                LIMIT ? OFFSET ?';
+        $params = array_merge([$userId], $blParams, [$perPage, $offset]);
+
+        $countSql = 'SELECT COUNT(*) FROM favorites f
+                     INNER JOIN posts p ON p.id = f.post_id
+                     WHERE f.user_id = ? ' . $blSql;
+        $countParams = array_merge([$userId], $blParams);
+
+        $posts = DB::rows($sql, $params);
+        $total = (int)(DB::scalar($countSql, $countParams) ?: 0);
 
         return ['posts' => $posts, 'total' => $total, 'pages' => (int)ceil($total / $perPage)];
     }

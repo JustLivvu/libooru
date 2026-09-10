@@ -87,7 +87,7 @@ HTML;
             echo '    <a href="' . $e(SITE_BASE) . '/favorites">Favorites</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/settings">Settings</a>' . "\n";
             if ($user['role'] === 'admin') {
-                echo '    <a href="' . $e(SITE_BASE) . '/admin">Admin</a>' . "\n";
+                echo '    <a href="' . $e(SITE_BASE) . '/admin">Panel</a>' . "\n";
             }
             echo '    <a href="' . $e(SITE_BASE) . '/logout">Logout</a>' . "\n";
         } else {
@@ -100,7 +100,7 @@ HTML;
 <div id="container">
 HTML;
         if ($sidebarTags !== null) {
-            self::sidebar($sidebarTags);
+            self::sidebar($sidebarTags, $user);
             echo '<main>';
         } else {
             echo '<main class="full-width">';
@@ -225,7 +225,7 @@ HTML;
 
     // ── Sidebar ───────────────────────────────────────────────────────────────
 
-    public static function sidebar(array $tags = []): void
+    public static function sidebar(array $tags = [], ?array $user = null): void
     {
         $quality = in_array($_GET['quality'] ?? '', ['low', 'medium', 'high', 'ultra'], true)
                    ? $_GET['quality'] : '';
@@ -257,14 +257,25 @@ HTML;
         echo '</form>';
 
         if ($tags) {
-            echo '<h5>Tags</h5>';
-            echo '<ul class="tag-list">';
-            foreach ($tags as $t) {
-                echo '<li><a href="' . self::url('/posts', ['q' => $t['name']]) . '">' . self::e($t['name']) . '</a>';
-                if (isset($t['count'])) echo ' <span>(' . $t['count'] . ')</span>';
-                echo '</li>';
+            if (!$user && class_exists('Auth')) {
+                $user = Auth::current();
             }
-            echo '</ul>';
+            if ($user && !empty($user['blacklist'])) {
+                $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+                $blacklistedMap = array_flip($blacklisted);
+                $tags = array_values(array_filter($tags, fn($t) => !isset($blacklistedMap[strtolower($t['name'])])));
+            }
+            $tags = array_slice($tags, 0, 20);
+            if ($tags) {
+                echo '<h5>Tags</h5>';
+                echo '<ul class="tag-list">';
+                foreach ($tags as $t) {
+                    echo '<li><a href="' . self::url('/posts', ['q' => $t['name']]) . '">' . self::e($t['name']) . '</a>';
+                    if (isset($t['count'])) echo ' <span>(' . $t['count'] . ')</span>';
+                    echo '</li>';
+                }
+                echo '</ul>';
+            }
         }
 
         echo '</div>';
