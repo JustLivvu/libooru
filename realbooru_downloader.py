@@ -409,7 +409,7 @@ class RealbooruDownloader:
     BASE_URL = "https://realbooru.com/index.php"
     USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-    def __init__(self, tag="femboy", extra_tag="realbooru", limit=0, threads=10, db_path="data/libooru.db", data_dir="data", max_consecutive_skips=100):
+    def __init__(self, tag="femboy", extra_tag="realbooru", limit=0, threads=10, db_path="data/libooru.db", data_dir="data", max_consecutive_skips=100, api_url="http://localhost:3000/api/v1", api_key="bce0bb3c90f0ca637ca810c21ec55cf2", use_api=True):
         self.tag = tag
         self.extra_tag = extra_tag
         self.limit = limit
@@ -417,11 +417,15 @@ class RealbooruDownloader:
         self.db_path = db_path
         self.data_dir = data_dir
         self.max_consecutive_skips = max_consecutive_skips
+        self.api_url = api_url
+        self.api_key = api_key
+        self.use_api = use_api
         self.uploads_dir = os.path.join(data_dir, "uploads")
         self.thumbs_dir = os.path.join(data_dir, "thumbs")
 
-        os.makedirs(self.uploads_dir, exist_ok=True)
-        os.makedirs(self.thumbs_dir, exist_ok=True)
+        if not self.use_api:
+            os.makedirs(self.uploads_dir, exist_ok=True)
+            os.makedirs(self.thumbs_dir, exist_ok=True)
 
         self.db = Database(self.db_path)
 
@@ -543,36 +547,73 @@ class RealbooruDownloader:
                 ext = 'jpg'
 
             filename = f"{md5_hash}.{ext}"
-            upload_path = os.path.join(self.uploads_dir, filename)
 
-            if ext in ['mp4', 'webm']:
-                thumb_filename = f"{md5_hash}.jpg"
+            if self.use_api:
+                mime_map = {
+                    'jpg': 'image/jpeg',
+                    'png': 'image/png',
+                    'gif': 'image/gif',
+                    'webp': 'image/webp',
+                    'mp4': 'video/mp4',
+                    'webm': 'video/webm',
+                }
+                mime = mime_map.get(ext, f"image/{ext}")
+
+                import requests
+                api_endpoint = f"{self.api_url.rstrip('/')}/posts"
+                headers = {'X-API-Key': self.api_key}
+                files = {'file': (filename, img_data, mime)}
+                data = {
+                    'tags': ' '.join(detail['tags']),
+                    'rating': detail['rating'],
+                    'source': detail['source'],
+                    'title': detail['title']
+                }
+
+                res = requests.post(api_endpoint, headers=headers, files=files, data=data, timeout=60)
+                if res.status_code == 201:
+                    resp_json = res.json()
+                    db_id = resp_json.get('id', 0)
+                    self.db.existing_md5s.add(md5_hash)
+                    self.db.existing_post_ids.add(str(post_id))
+                    return ('downloaded', post_id, db_id, filename, detail['tags'])
+                elif res.status_code == 409:
+                    self.db.existing_md5s.add(md5_hash)
+                    self.db.existing_post_ids.add(str(post_id))
+                    return ('skipped', post_id, md5_hash)
+                else:
+                    return ('error', post_id, f"Błąd API HTTP {res.status_code}: {res.text.strip()}")
             else:
-                thumb_filename = filename
+                upload_path = os.path.join(self.uploads_dir, filename)
 
-            thumb_path = os.path.join(self.thumbs_dir, thumb_filename)
+                if ext in ['mp4', 'webm']:
+                    thumb_filename = f"{md5_hash}.jpg"
+                else:
+                    thumb_filename = filename
 
-            with open(upload_path, 'wb') as f:
-                f.write(img_data)
+                thumb_path = os.path.join(self.thumbs_dir, thumb_filename)
 
-            img_info = process_image(upload_path, thumb_path)
-            filesize = len(img_data)
+                with open(upload_path, 'wb') as f:
+                    f.write(img_data)
 
-            post_record = {
-                'filename': filename,
-                'ext': img_info.get('ext', ext),
-                'mime': img_info.get('mime', f"image/{ext}"),
-                'filesize': filesize,
-                'width': img_info.get('width'),
-                'height': img_info.get('height'),
-                'md5': md5_hash,
-                'rating': detail['rating'],
-                'source': detail['source'],
-                'title': detail['title']
-            }
+                img_info = process_image(upload_path, thumb_path)
+                filesize = len(img_data)
 
-            db_id = self.db.insert_post(post_record, detail['tags'])
-            return ('downloaded', post_id, db_id, filename, detail['tags'])
+                post_record = {
+                    'filename': filename,
+                    'ext': img_info.get('ext', ext),
+                    'mime': img_info.get('mime', f"image/{ext}"),
+                    'filesize': filesize,
+                    'width': img_info.get('width'),
+                    'height': img_info.get('height'),
+                    'md5': md5_hash,
+                    'rating': detail['rating'],
+                    'source': detail['source'],
+                    'title': detail['title']
+                }
+
+                db_id = self.db.insert_post(post_record, detail['tags'])
+                return ('downloaded', post_id, db_id, filename, detail['tags'])
         except Exception as e:
             return ('error', post_id, str(e))
 
@@ -581,6 +622,11 @@ class RealbooruDownloader:
         print(f"Tag szukany : '{self.tag}'")
         print(f"Tag dodatkowy: '{self.extra_tag}'")
         print(f"Baza danych  : '{self.db_path}'")
+        if self.use_api:
+            print(f"Tryb zapisu  : API Libooru ({self.api_url})")
+            print(f"Klucz API    : {self.api_key[:6]}...{self.api_key[-4:]}")
+        else:
+            print(f"Tryb zapisu  : Bezpośredni zapis do pliku ({self.data_dir})")
         print(f"Limit postów : {self.limit if self.limit > 0 else 'Brak limitu (wszystkie strony)'}")
         print(f"Wątki (threads): {self.threads}")
         print(f"Max pominięć : {self.max_consecutive_skips if self.max_consecutive_skips > 0 else 'Brak (skanuj wszystko)'}\n")
@@ -686,8 +732,11 @@ def main():
     parser.add_argument("--limit", type=int, default=0, help="Liczba postów do pobrania (domyślnie: 0 = pobierz wszystkie)")
     parser.add_argument("--threads", type=int, default=10, help="Liczba wątków (domyślnie: 10)")
     parser.add_argument("--db", default="data/libooru.db", help="Ścieżka do bazy SQLite (domyślnie: data/libooru.db)")
-    parser.add_argument("--data-dir", default="data", help="Katalog na pobrane pliki i miniaturki (domyślnie: data)")
+    parser.add_argument("--data-dir", default="data", help="Katalog na pobrane pliki i miniaturki w trybie bezpośrednim (domyślnie: data)")
     parser.add_argument("--max-consecutive-skips", type=int, default=100, help="Maksymalna liczba pominiętych postów z rzędu przed zatrzymaniem pobierania (domyślnie: 100, 0 = wyłącz)")
+    parser.add_argument("--api-url", default="http://localhost:3000/api/v1", help="URL do API Libooru (domyślnie: http://localhost:3000/api/v1)")
+    parser.add_argument("--api-key", default="bce0bb3c90f0ca637ca810c21ec55cf2", help="Klucz API użytkownika Libooru (domyślnie: bce0bb3c90f0ca637ca810c21ec55cf2)")
+    parser.add_argument("--no-api", action="store_true", help="Wyłącz upload przez API i zapisuj pliki lokalnie/bezpośrednio do bazy")
 
     args = parser.parse_args()
 
@@ -698,7 +747,10 @@ def main():
         threads=args.threads,
         db_path=args.db,
         data_dir=args.data_dir,
-        max_consecutive_skips=args.max_consecutive_skips
+        max_consecutive_skips=args.max_consecutive_skips,
+        api_url=args.api_url,
+        api_key=args.api_key,
+        use_api=not args.no_api
     )
     downloader.download()
 
