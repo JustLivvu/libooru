@@ -261,14 +261,11 @@ function page_posts(?array $user): void
         $sel = $order === $v ? ' selected' : '';
         echo "<option value=\"{$v}\"{$sel}>{$l}</option>";
     }
-    echo '</select><br>';
-    // Quality filter — derived automatically from stored image height
-    $qualities = ['' => 'All', 'low' => 'Low (<720p)', 'medium' => 'Medium (720p)', 'high' => 'High (FHD)', 'ultra' => 'Ultra (4K)'];
-    foreach ($qualities as $val => $label) {
-        $checked = $quality === $val ? ' checked' : '';
-        echo "<label style=\"margin-right:.8em\"><input type=\"radio\" name=\"quality\" value=\"{$val}\"{$checked}> {$label}</label>";
+    echo '</select> ';
+    if ($quality !== '') {
+        echo '<input type="hidden" name="quality" value="' . View::e($quality) . '"> ';
     }
-    echo '<br><button>Filter</button></form>';
+    echo '<button>Filter</button></form>';
 
     echo '<p>' . $result['total'] . ' posts</p>';
     View::postGrid($result['posts']);

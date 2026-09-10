@@ -179,7 +179,8 @@ main.full-width {
   margin-bottom: 12px;
 }
 
-#sidebar input[type="text"] {
+#sidebar input[type="text"],
+#sidebar select {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border-color);
@@ -191,7 +192,8 @@ main.full-width {
   transition: border-color 0.15s ease;
 }
 
-#sidebar input[type="text"]:focus {
+#sidebar input[type="text"]:focus,
+#sidebar select:focus {
   border-color: var(--text-muted);
 }
 
