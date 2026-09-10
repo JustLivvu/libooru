@@ -5,6 +5,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/image.php';
+require_once __DIR__ . '/storage.php';
 
 /**
  * Post model: CRUD, tag management, upload.
@@ -197,18 +198,24 @@ class Post
         }
 
         $filename = $md5 . '.' . $ext;
-        $destPath = UPLOAD_DIR . '/' . $filename;
 
-        if (!move_uploaded_file($file['tmp_name'], $destPath)) {
-            throw new RuntimeException('Failed to save uploaded file.');
-        }
-        chmod($destPath, 0644);
-
-        [$w, $h] = Image::getDimensions($destPath, $mime);
+        [$w, $h] = Image::getDimensions($file['tmp_name'], $mime);
         $quality = self::determineQuality($w ?: null, $h ?: null);
 
-        // Make thumbnail
-        Image::makeThumbnail($destPath, Image::thumbPath($filename), $mime);
+        // Make temporary thumbnail locally
+        $tempThumbDir = sys_get_temp_dir();
+        $thumbFilename = in_array(strtolower($ext), ['mp4', 'webm'], true)
+            ? $md5 . '.jpg'
+            : $filename;
+        $tempThumbPath = $tempThumbDir . '/thumb_' . $thumbFilename;
+        $thumbMime = in_array(strtolower($ext), ['mp4', 'webm'], true) ? 'image/jpeg' : $mime;
+
+        if (!Image::makeThumbnail($file['tmp_name'], $tempThumbPath, $mime)) {
+            throw new RuntimeException('Failed to generate thumbnail.');
+        }
+
+        // Store media & thumbnail using Storage layer
+        Storage::putMedia($filename, $file['tmp_name'], $tempThumbPath, $mime, $thumbMime);
 
         $userId = Auth::id();
         $rating = in_array($meta['rating'] ?? '', ['s', 'q', 'e'], true) ? $meta['rating'] : 'q';
@@ -262,8 +269,7 @@ class Post
         $post = DB::row('SELECT filename FROM posts WHERE id = ?', [$id]);
         if (!$post) return;
         // Remove files
-        @unlink(UPLOAD_DIR . '/' . $post['filename']);
-        @unlink(Image::thumbPath($post['filename']));
+        Storage::deleteMedia($post['filename']);
         // Remove tags count
         $tags = DB::rows(
             'SELECT t.id FROM tags t INNER JOIN post_tags pt ON pt.tag_id = t.id WHERE pt.post_id = ?',

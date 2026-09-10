@@ -22,16 +22,12 @@ class Image
 
     public static function thumbUrl(string $filename): string
     {
-        $ext = pathinfo($filename, PATHINFO_EXTENSION);
-        if (in_array($ext, ['mp4', 'webm'], true)) {
-            $filename = pathinfo($filename, PATHINFO_FILENAME) . '.jpg';
-        }
-        return SITE_BASE . '/thumb/' . rawurlencode($filename);
+        return Storage::getThumbUrl($filename);
     }
 
     public static function fileUrl(string $filename): string
     {
-        return SITE_BASE . '/file/' . rawurlencode($filename);
+        return Storage::getFileUrl($filename);
     }
 
     /**

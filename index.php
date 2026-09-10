@@ -4,6 +4,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/s3.php';
+require_once __DIR__ . '/storage.php';
 require_once __DIR__ . '/image.php';
 require_once __DIR__ . '/post.php';
 require_once __DIR__ . '/view.php';
@@ -18,11 +20,11 @@ $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $base = SITE_BASE;
 
 if (str_starts_with($uri, $base . '/thumb/')) {
-    Router::serveFile(THUMB_DIR, rawurldecode(substr($uri, strlen($base . '/thumb/'))));
+    Storage::serveFile('thumb', rawurldecode(substr($uri, strlen($base . '/thumb/'))));
     exit;
 }
 if (str_starts_with($uri, $base . '/file/')) {
-    Router::serveFile(UPLOAD_DIR, rawurldecode(substr($uri, strlen($base . '/file/'))));
+    Storage::serveFile('upload', rawurldecode(substr($uri, strlen($base . '/file/'))));
     exit;
 }
 if (str_starts_with($uri, $base . '/static/')) {
@@ -736,6 +738,21 @@ function page_admin(?array $user, string $method): void
             View::setSiteSetting('site_banner', $banner);
             View::setSiteSetting('default_blacklist', $default);
             View::setFlash('Site settings saved.', 'ok');
+        } elseif ($action === 'storage_settings') {
+            $driver    = in_array($_POST['storage_driver'] ?? '', ['local', 's3'], true) ? $_POST['storage_driver'] : 'local';
+            $endpoint  = trim($_POST['s3_endpoint'] ?? '');
+            $region    = trim($_POST['s3_region'] ?? 'us-east-1');
+            $bucket    = trim($_POST['s3_bucket'] ?? '');
+            $accessKey = trim($_POST['s3_access_key'] ?? '');
+            $secretKey = trim($_POST['s3_secret_key'] ?? '');
+
+            View::setSiteSetting('storage_driver', $driver);
+            View::setSiteSetting('s3_endpoint',   $endpoint);
+            View::setSiteSetting('s3_region',     $region);
+            View::setSiteSetting('s3_bucket',     $bucket);
+            View::setSiteSetting('s3_access_key', $accessKey);
+            View::setSiteSetting('s3_secret_key', $secretKey);
+            View::setFlash('Storage settings saved.', 'ok');
         }
 
         Router::redirect('/admin');
@@ -750,6 +767,13 @@ function page_admin(?array $user, string $method): void
     $curLogo             = View::siteSetting('site_logo');
     $curBanner           = View::siteSetting('site_banner');
     $curDefaultBlacklist = View::siteSetting('default_blacklist', '');
+
+    $curStorageDriver = View::siteSetting('storage_driver', 'local');
+    $curS3Endpoint    = View::siteSetting('s3_endpoint', '');
+    $curS3Region      = View::siteSetting('s3_region', 'us-east-1');
+    $curS3Bucket      = View::siteSetting('s3_bucket', '');
+    $curS3AccessKey   = View::siteSetting('s3_access_key', '');
+    $curS3SecretKey   = View::siteSetting('s3_secret_key', '');
 
     View::header('Panel', $user);
     View::flash();
@@ -775,6 +799,31 @@ function page_admin(?array $user, string $method): void
     echo '<label>Banner URL <small>(used instead of logo, ~40px tall)</small><br><input name="site_banner" value="' . View::e($curBanner) . '" style="width:100%" placeholder="https://…"></label><br><br>';
     echo '<label>Default Blacklist Tags for New Users <small>(space or line separated)</small><br><textarea name="default_blacklist" rows="2" style="width:100%" placeholder="e.g. nsfw gore">' . View::e($curDefaultBlacklist) . '</textarea></label><br><br>';
     echo '<button>Save Settings</button>';
+    echo '</form>';
+
+    // Storage settings
+    $isLocal = $curStorageDriver === 'local';
+    $isS3    = $curStorageDriver === 's3';
+    echo '<h2>Media Storage Settings</h2>';
+    echo '<form method="post" style="max-width:500px">';
+    View::csrfField();
+    echo '<input type="hidden" name="action" value="storage_settings">';
+    echo '<label>Storage Method<br>';
+    echo '<select name="storage_driver" style="width:100%" onchange="document.getElementById(\'s3-fields\').style.display = this.value === \'s3\' ? \'block\' : \'none\';">';
+    echo '<option value="local"' . ($isLocal ? ' selected' : '') . '>Local (data/uploads, data/thumbs)</option>';
+    echo '<option value="s3"' . ($isS3 ? ' selected' : '') . '>S3 (Amazon S3, MinIO, R2, Wasabi, etc.)</option>';
+    echo '</select></label><br><br>';
+
+    echo '<div id="s3-fields" style="display:' . ($isS3 ? 'block' : 'none') . '; border: 1px solid var(--border); padding: 15px; border-radius: 4px; margin-bottom: 15px;">';
+    echo '<h3 style="margin-top:0;font-size:15px">S3 Configuration</h3>';
+    echo '<label>Endpoint <small>(e.g. https://s3.amazonaws.com or https://minio.example.com)</small><br><input name="s3_endpoint" value="' . View::e($curS3Endpoint) . '" style="width:100%" placeholder="https://s3.us-east-1.amazonaws.com"></label><br><br>';
+    echo '<label>Bucket Name<br><input name="s3_bucket" value="' . View::e($curS3Bucket) . '" style="width:100%" placeholder="my-libooru-bucket"></label><br><br>';
+    echo '<label>Region <small>(default: us-east-1)</small><br><input name="s3_region" value="' . View::e($curS3Region) . '" style="width:100%" placeholder="us-east-1"></label><br><br>';
+    echo '<label>Access Key<br><input name="s3_access_key" value="' . View::e($curS3AccessKey) . '" style="width:100%" placeholder="AKIA..."></label><br><br>';
+    echo '<label>Secret Key<br><input type="password" name="s3_secret_key" value="' . View::e($curS3SecretKey) . '" style="width:100%"></label><br><br>';
+    echo '</div>';
+
+    echo '<button>Save Storage Settings</button>';
     echo '</form>';
 
     // Users table
