@@ -25,7 +25,9 @@ const ALLOWED_TYPES = [
 ];
 
 // Max upload size (bytes) — also set in php.ini
-define('MAX_FILE_SIZE', 100 * 1024 * 1024); // 100 MB
+// Realbooru videos are streamed to disk by the scraper, so they do not consume
+// PHP memory.  Keep a generous safety ceiling while allowing the source media.
+define('MAX_FILE_SIZE', 1024 * 1024 * 1024); // 1 GB
 
 // API key header
 define('API_KEY_HEADER', 'X-API-Key');

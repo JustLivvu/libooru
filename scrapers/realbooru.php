@@ -19,9 +19,27 @@ function logMsg(string $msg): void {
     echo "[" . date('Y-m-d H:i:s') . "] " . $msg . "\n";
 }
 
+function downloadToFile(string $url, string $destination, $context): bool {
+    $input = @fopen($url, 'rb', false, $context);
+    if ($input === false) {
+        return false;
+    }
+
+    $output = @fopen($destination, 'wb');
+    if ($output === false) {
+        fclose($input);
+        return false;
+    }
+
+    $bytes = @stream_copy_to_stream($input, $output);
+    fclose($output);
+    fclose($input);
+
+    return $bytes !== false && $bytes > 0;
+}
+
 logMsg("Starting PHP scraper for tag: $tag");
 
-$page = 0;
 $downloaded = 0;
 $skipped = 0;
 $errors = 0;
@@ -32,6 +50,27 @@ if (!$user) {
     die("No admin user found.\n");
 }
 Auth::setUser($user);
+
+// Durable per-tag progress lives in SQLite, not in a page-cache file.  It
+// prevents a restarted task from walking thousands of already handled pages.
+$progressSource = 'realbooru_oldest_first';
+DB::exec(
+    'CREATE TABLE IF NOT EXISTS scraper_progress (
+        source TEXT NOT NULL,
+        tag TEXT NOT NULL COLLATE NOCASE,
+        next_pid INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (source, tag)
+    )'
+);
+$page = max(0, (int)(DB::scalar(
+    'SELECT next_pid FROM scraper_progress WHERE source = ? AND tag = ?',
+    [$progressSource, $tag]
+) ?: 0));
+
+if ($page > 0) {
+    logMsg("Continuing at pid=$page.");
+}
 
 // Avoid one SQL query for every already imported post.  This is especially
 // important after a restart, when a tag can have thousands of older results.
@@ -44,7 +83,10 @@ foreach (DB::rows("SELECT id, title FROM posts WHERE title LIKE 'Realbooru #%'")
 logMsg("Loaded " . count($knownRealbooruIds) . " existing Realbooru post IDs.");
 
 while (true) {
-    $url = "https://realbooru.com/index.php?page=post&s=list&tags=" . urlencode($tag) . "&pid=" . $page;
+    // Realbooru's search modifier sorts by ascending ID, which is the site's
+    // chronological order: oldest post first, newest post last.
+    $searchTags = $tag . ' sort:id:asc';
+    $url = "https://realbooru.com/index.php?page=post&s=list&tags=" . urlencode($searchTags) . "&pid=" . $page;
     logMsg("Fetching page list (pid=$page)...");
     
     $opts = [
@@ -112,15 +154,14 @@ while (true) {
         $imgUrl = preg_replace('#^(https?://realbooru\.com)/+#', '$1/', $imgUrl);
         
         $tmpFile = tempnam(sys_get_temp_dir(), 'rb_');
-        $imgData = @file_get_contents($imgUrl, false, $context);
-        if (!$imgData) {
+        logMsg("  Downloading media for #$realbooruId...");
+        if (!downloadToFile($imgUrl, $tmpFile, $context)) {
             logMsg("  Error: Failed to download $imgUrl");
             $errors++;
             @unlink($tmpFile);
             continue;
         }
         
-        file_put_contents($tmpFile, $imgData);
         $md5 = md5_file($tmpFile);
         
         $exists = DB::scalar('SELECT id FROM posts WHERE md5 = ?', [$md5]);
@@ -177,6 +218,12 @@ while (true) {
     }
     
     $page += 42;
+    DB::exec(
+        'INSERT INTO scraper_progress (source, tag, next_pid, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(source, tag) DO UPDATE SET next_pid = excluded.next_pid, updated_at = excluded.updated_at',
+        [$progressSource, $tag, $page, time()]
+    );
 }
 
 logMsg("Done! Downloaded: $downloaded, Skipped: $skipped, Errors: $errors.");
