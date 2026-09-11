@@ -122,6 +122,10 @@ function dispatch(string $method, string $path): void
     elseif ($path === '/favorites') {
         page_favorites($user);
     }
+    // Favorites Lucky Draw
+    elseif ($path === '/favorites/lucky') {
+        page_favorites_lucky($user);
+    }
     // Tags
     elseif ($path === '/tags') {
         page_tags($user);
@@ -699,9 +703,68 @@ function page_favorites(?array $user): void
     View::flash();
     echo '<h1>My Favorites</h1>';
     echo '<p>' . $result['total'] . ' favorite posts</p>';
+    if ($result['total'] > 0) {
+        echo '<p><a href="' . View::url('/favorites/lucky') . '" class="button">Lucky draw</a></p>';
+    }
     View::postGrid($result['posts']);
     View::paginator($page, $result['pages'], '/favorites');
     View::footer();
+}
+
+function page_favorites_lucky(?array $user): void
+{
+    Auth::require();
+    $post = Post::getRandomFavorite((int)$user['id']);
+    if (!$post) {
+        Router::redirect('/favorites');
+    }
+
+    $fileUrl = Image::fileUrl($post['filename']);
+    $nextUrl = View::url('/favorites/lucky');
+    $backUrl = View::url('/favorites');
+    
+    $ext = pathinfo($post['filename'], PATHINFO_EXTENSION);
+    $isVideo = in_array(strtolower($ext), ['mp4', 'webm'], true);
+
+    // We render a simple fullscreen page
+    echo '<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Lucky Draw</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; font-family: sans-serif; }
+        img, video { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .controls { position: absolute; bottom: 20px; text-align: center; width: 100%; }
+        .btn { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid #fff; padding: 10px 20px; margin: 0 10px; text-decoration: none; font-size: 16px; border-radius: 4px; cursor: pointer; }
+        .btn:hover { background: rgba(255,255,255,0.2); }
+    </style>
+</head>
+<body>
+    ';
+    
+    if ($isVideo) {
+        echo '<video src="' . htmlspecialchars($fileUrl) . '" autoplay loop controls></video>';
+    } else {
+        echo '<img src="' . htmlspecialchars($fileUrl) . '" alt="Lucky Draw Image">';
+    }
+
+    echo '
+    <div class="controls">
+        <a href="' . $backUrl . '" class="btn">Back</a>
+        <a href="' . $nextUrl . '" class="btn" id="random-btn">Random</a>
+    </div>
+    <script>
+        document.addEventListener("keydown", function(e) {
+            if (e.code === "Space") {
+                e.preventDefault();
+                document.getElementById("random-btn").click();
+            }
+        });
+    </script>
+</body>
+</html>';
+    exit;
 }
 
 function page_admin(?array $user, string $method): void

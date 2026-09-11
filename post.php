@@ -396,6 +396,16 @@ class Post
         return ['posts' => $posts, 'total' => $total, 'pages' => (int)ceil($total / $perPage)];
     }
 
+    public static function getRandomFavorite(int $userId): ?array
+    {
+        $sql = 'SELECT p.* FROM posts p
+                INNER JOIN favorites f ON f.post_id = p.id
+                WHERE f.user_id = ?
+                ORDER BY RANDOM()
+                LIMIT 1';
+        return DB::row($sql, [$userId]) ?: null;
+    }
+
     // -------- search helpers --------
 
     public static function popularTags(int $limit = 20): array
