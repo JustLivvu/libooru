@@ -7,22 +7,10 @@ require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../post.php';
 require_once __DIR__ . '/../view.php';
 
-$options = getopt('', ['tag:', 'task-id:', 'reset-cache']);
-$tag = $options['tag'] ?? '';
+$options = getopt('', ['tag:', 'task-id:']);
+$tag = trim($options['tag'] ?? '');
 $taskId = (int)($options['task-id'] ?? 0);
-$resetCache = array_key_exists('reset-cache', $options);
-// Load or reset cache
-$cachePath = __DIR__ . '/../data/scraper_cache.json';
-if ($resetCache && file_exists($cachePath)) {
-    unlink($cachePath);
-    logMsg("Cache reset requested – existing cache file removed.");
-}
-$cached = [];
-if (file_exists($cachePath)) {
-    $json = file_get_contents($cachePath);
-    $cached = json_decode($json, true) ?: [];
-}
-$page = $cached['last_pid'] ?? 0;
+
 if (!$tag || !$taskId) {
     die("Usage: php realbooru.php --tag <tag> --task-id <id>\n");
 }
@@ -44,6 +32,16 @@ if (!$user) {
     die("No admin user found.\n");
 }
 Auth::setUser($user);
+
+// Avoid one SQL query for every already imported post.  This is especially
+// important after a restart, when a tag can have thousands of older results.
+$knownRealbooruIds = [];
+foreach (DB::rows("SELECT id, title FROM posts WHERE title LIKE 'Realbooru #%'") as $post) {
+    if (preg_match('/^Realbooru #(\d+)$/', (string)$post['title'], $match)) {
+        $knownRealbooruIds[$match[1]] = (int)$post['id'];
+    }
+}
+logMsg("Loaded " . count($knownRealbooruIds) . " existing Realbooru post IDs.");
 
 while (true) {
     $url = "https://realbooru.com/index.php?page=post&s=list&tags=" . urlencode($tag) . "&pid=" . $page;
@@ -77,11 +75,8 @@ while (true) {
     foreach ($postIds as $realbooruId) {
         logMsg("Processing Realbooru #$realbooruId...");
         
-        // Skip early check by checking if title exists in db? Wait, md5 is better, but we don't have md5 until we download or parse.
-        // The python script checked "Realbooru #id" in title. Let's do that for quick skip.
-        $existsTitle = DB::scalar("SELECT id FROM posts WHERE title = ?", ["Realbooru #$realbooruId"]);
-        if ($existsTitle) {
-            logMsg("  Skipped: Post #$realbooruId already in DB (Post #$existsTitle).");
+        if (isset($knownRealbooruIds[$realbooruId])) {
+            logMsg("  Skipped: Post #$realbooruId already in DB (Post #{$knownRealbooruIds[$realbooruId]}).");
             $skipped++;
             continue;
         }
@@ -170,6 +165,7 @@ while (true) {
         
         try {
             $postId = Post::upload($file, $meta);
+            $knownRealbooruIds[$realbooruId] = $postId;
             logMsg("  Success: Uploaded as Post #$postId.");
             $downloaded++;
         } catch (Throwable $e) {
@@ -181,8 +177,6 @@ while (true) {
     }
     
     $page += 42;
-    // Save progress to cache
-    @file_put_contents($cachePath, json_encode(['last_pid' => $page]), LOCK_EX);
 }
 
 logMsg("Done! Downloaded: $downloaded, Skipped: $skipped, Errors: $errors.");
