@@ -983,49 +983,70 @@ function page_admin(?array $user, string $method): void
 
     // Stats
     echo '<h2>Statistics</h2>';
-    echo '<dl>';
-    echo '<dt>Posts</dt><dd>' . $postCount . '</dd>';
-    echo '<dt>Tags</dt><dd>' . $tagCount . '</dd>';
-    echo '<dt>Comments</dt><dd>' . $commentCount . '</dd>';
-    echo '<dt>Users</dt><dd>' . count($users) . '</dd>';
-    echo '</dl>';
+    echo '<table>';
+    echo '<tbody>';
+    echo '<tr><th style="text-align:left; padding:8px;">Posts</th><td style="padding:8px;">' . $postCount . '</td></tr>';
+    echo '<tr><th style="text-align:left; padding:8px;">Tags</th><td style="padding:8px;">' . $tagCount . '</td></tr>';
+    echo '<tr><th style="text-align:left; padding:8px;">Comments</th><td style="padding:8px;">' . $commentCount . '</td></tr>';
+    echo '<tr><th style="text-align:left; padding:8px;">Users</th><td style="padding:8px;">' . count($users) . '</td></tr>';
+    echo '</tbody>';
+    echo '</table>';
 
     // Site settings
     echo '<h2>Site Settings</h2>';
     echo '<p style="color:var(--muted-text);font-size:12px">Set logo <strong>or</strong> banner — if logo is set it takes priority. Leave blank to show site name as text.</p>';
-    echo '<form method="post" style="max-width:500px">';
+    echo '<form method="post" style="max-width:500px; display:flex; flex-direction:column; gap:15px;">';
     View::csrfField();
     echo '<input type="hidden" name="action" value="site_settings">';
-    echo '<label>Site name<br><input name="site_name" value="' . View::e($curName) . '" style="width:100%"></label><br><br>';
-    echo '<label>Logo URL <small>(small icon, ~32px tall)</small><br><input name="site_logo" value="' . View::e($curLogo) . '" style="width:100%" placeholder="https://…"></label><br><br>';
-    echo '<label>Banner URL <small>(used instead of logo, ~40px tall)</small><br><input name="site_banner" value="' . View::e($curBanner) . '" style="width:100%" placeholder="https://…"></label><br><br>';
-    echo '<label>Default Blacklist Tags for New Users <small>(space or line separated)</small><br><textarea name="default_blacklist" rows="2" style="width:100%" placeholder="e.g. nsfw gore">' . View::e($curDefaultBlacklist) . '</textarea></label><br><br>';
-    echo '<button>Save Settings</button>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Site name</span><input name="site_name" value="' . View::e($curName) . '" style="width:100%"></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Logo URL <small>(small icon, ~32px tall)</small></span><input name="site_logo" value="' . View::e($curLogo) . '" style="width:100%" placeholder="https://…"></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Banner URL <small>(used instead of logo, ~40px tall)</small></span><input name="site_banner" value="' . View::e($curBanner) . '" style="width:100%" placeholder="https://…"></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Default Blacklist Tags for New Users <small>(space or line separated)</small></span><textarea name="default_blacklist" rows="2" style="width:100%" placeholder="e.g. nsfw gore">' . View::e($curDefaultBlacklist) . '</textarea></label>';
+    echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
 
     // Storage settings
     $isLocal = $curStorageDriver === 'local';
     $isS3    = $curStorageDriver === 's3';
     echo '<h2>Media Storage Settings</h2>';
-    echo '<form method="post" style="max-width:500px">';
-    View::csrfField();
-    echo '<input type="hidden" name="action" value="storage_settings">';
-    echo '<label>Storage Method<br>';
-    echo '<select name="storage_driver" style="width:100%" onchange="document.getElementById(\'s3-fields\').style.display = this.value === \'s3\' ? \'block\' : \'none\';">';
-    echo '<option value="local"' . ($isLocal ? ' selected' : '') . '>Local (data/uploads, data/thumbs)</option>';
-    echo '<option value="s3"' . ($isS3 ? ' selected' : '') . '>S3 (Amazon S3, MinIO, R2, Wasabi, etc.)</option>';
-    echo '</select></label><br><br>';
 
-    echo '<div id="s3-fields" style="display:' . ($isS3 ? 'block' : 'none') . '; border: 1px solid var(--border); padding: 15px; border-radius: 4px; margin-bottom: 15px;">';
-    echo '<h3 style="margin-top:0;font-size:15px">S3 Configuration</h3>';
-    echo '<label>Endpoint <small>(e.g. https://s3.amazonaws.com or https://minio.example.com)</small><br><input name="s3_endpoint" value="' . View::e($curS3Endpoint) . '" style="width:100%" placeholder="https://s3.us-east-1.amazonaws.com"></label><br><br>';
-    echo '<label>Bucket Name<br><input name="s3_bucket" value="' . View::e($curS3Bucket) . '" style="width:100%" placeholder="my-libooru-bucket"></label><br><br>';
-    echo '<label>Region <small>(default: us-east-1)</small><br><input name="s3_region" value="' . View::e($curS3Region) . '" style="width:100%" placeholder="us-east-1"></label><br><br>';
-    echo '<label>Access Key<br><input name="s3_access_key" value="' . View::e($curS3AccessKey) . '" style="width:100%" placeholder="AKIA..."></label><br><br>';
-    echo '<label>Secret Key<br><input type="password" name="s3_secret_key" value="' . View::e($curS3SecretKey) . '" style="width:100%"></label><br><br>';
+    $totalBytes = 0;
+    if (file_exists(__DIR__ . '/data/uploads')) {
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(__DIR__ . '/data/uploads', FilesystemIterator::SKIP_DOTS)) as $file) { $totalBytes += $file->getSize(); }
+    }
+    if (file_exists(__DIR__ . '/data/thumbs')) {
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(__DIR__ . '/data/thumbs', FilesystemIterator::SKIP_DOTS)) as $file) { $totalBytes += $file->getSize(); }
+    }
+    $gbTaken = number_format($totalBytes / (1024 * 1024 * 1024), 2);
+    
+    // Calculate S3 estimated storage based on DB file sizes + ~50KB per thumbnail
+    $s3BytesEstimate = (int)DB::scalar('SELECT SUM(filesize) FROM posts') + ($postCount * 51200);
+    $s3GbTaken = number_format($s3BytesEstimate / (1024 * 1024 * 1024), 2);
+
+    echo '<div style="display:flex; gap:20px; margin-bottom:15px; flex-wrap:wrap;">';
+    echo '<p style="color:var(--muted-text);font-size:14px;margin:0;">Local Storage taken: <strong>' . $gbTaken . ' GB</strong></p>';
+    echo '<p style="color:var(--muted-text);font-size:14px;margin:0;">S3 Storage taken (est.): <strong>' . $s3GbTaken . ' GB</strong></p>';
     echo '</div>';
 
-    echo '<button>Save Storage Settings</button>';
+    echo '<form method="post" style="max-width:500px; display:flex; flex-direction:column; gap:15px;">';
+    View::csrfField();
+    echo '<input type="hidden" name="action" value="storage_settings">';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Storage Method</span>';
+    echo '<select name="storage_driver" style="width:100%" onchange="document.getElementById(\'s3-fields\').style.display = this.value === \'s3\' ? \'flex\' : \'none\';">';
+    echo '<option value="local"' . ($isLocal ? ' selected' : '') . '>Local (data/uploads, data/thumbs)</option>';
+    echo '<option value="s3"' . ($isS3 ? ' selected' : '') . '>S3 (Amazon S3, MinIO, R2, Wasabi, etc.)</option>';
+    echo '</select></label>';
+
+    echo '<div id="s3-fields" style="display:' . ($isS3 ? 'flex' : 'none') . '; flex-direction:column; gap:15px; border: 1px solid var(--border); padding: 15px; border-radius: 4px;">';
+    echo '<h3 style="margin:0;font-size:15px">S3 Configuration</h3>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Endpoint <small>(e.g. https://s3.amazonaws.com)</small></span><input name="s3_endpoint" value="' . View::e($curS3Endpoint) . '" style="width:100%" placeholder="https://s3.us-east-1.amazonaws.com"></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Bucket Name</span><input name="s3_bucket" value="' . View::e($curS3Bucket) . '" style="width:100%" placeholder="my-libooru-bucket"></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Region <small>(default: us-east-1)</small></span><input name="s3_region" value="' . View::e($curS3Region) . '" style="width:100%" placeholder="us-east-1"></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Access Key</span><input name="s3_access_key" value="' . View::e($curS3AccessKey) . '" style="width:100%" placeholder="AKIA..."></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Secret Key</span><input type="password" name="s3_secret_key" value="' . View::e($curS3SecretKey) . '" style="width:100%"></label>';
+    echo '</div>';
+
+    echo '<button style="align-self:flex-start;">Save Storage Settings</button>';
     echo '</form>';
 
     // Users table
