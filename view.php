@@ -88,6 +88,7 @@ HTML;
             echo '    <a href="' . $e(SITE_BASE) . '/settings">Settings</a>' . "\n";
             if ($user['role'] === 'admin') {
                 echo '    <a href="' . $e(SITE_BASE) . '/admin">Panel</a>' . "\n";
+                echo '    <a href="' . $e(SITE_BASE) . '/scraper">Scraper</a>' . "\n";
             }
             echo '    <a href="' . $e(SITE_BASE) . '/logout">Logout</a>' . "\n";
         } else {

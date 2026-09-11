@@ -130,6 +130,10 @@ function dispatch(string $method, string $path): void
     elseif ($path === '/tags') {
         page_tags($user);
     }
+    // Scraper
+    elseif ($path === '/scraper') {
+        page_scraper($user, $method);
+    }
     // Login
     elseif ($path === '/login') {
         page_login($user, $method);
@@ -765,6 +769,137 @@ function page_favorites_lucky(?array $user): void
 </body>
 </html>';
     exit;
+}
+
+function page_scraper(?array $user, string $method): void
+{
+    Auth::requireAdmin();
+
+    if ($method === 'POST') {
+        View::verifyCsrf();
+        $action = $_POST['action'] ?? '';
+        
+        if ($action === 'start') {
+            $tag = trim($_POST['tag'] ?? '');
+            if ($tag !== '') {
+                $script = __DIR__ . '/realbooru_downloader.py';
+                $dbPath = __DIR__ . '/data/libooru.db';
+                $dataDir = __DIR__ . '/data';
+                
+                DB::exec('INSERT INTO scraper_tasks (tag, status) VALUES (?, ?)', [$tag, 'starting']);
+                $taskId = (int)DB::lastId();
+                $logFile = __DIR__ . '/data/scraper_' . $taskId . '.log';
+                
+                // Launch in background and get PID
+                $cmd = sprintf(
+                    'python3 -u %s --tag %s --db %s --data-dir %s > %s 2>&1 & echo $!', 
+                    escapeshellarg($script), 
+                    escapeshellarg($tag),
+                    escapeshellarg($dbPath),
+                    escapeshellarg($dataDir),
+                    escapeshellarg($logFile)
+                );
+                $pid = (int)shell_exec($cmd);
+                if ($pid > 0) {
+                    DB::exec('UPDATE scraper_tasks SET pid = ?, status = ? WHERE id = ?', [$pid, 'running', $taskId]);
+                    View::setFlash("Started scraper for tag: $tag (PID: $pid)", 'ok');
+                } else {
+                    DB::exec('UPDATE scraper_tasks SET status = ? WHERE id = ?', ['error', $taskId]);
+                    View::setFlash("Failed to start scraper process.", 'error');
+                }
+            } else {
+                View::setFlash("Tag cannot be empty.", 'error');
+            }
+        } elseif ($action === 'clean') {
+            $completed = DB::rows("SELECT id FROM scraper_tasks WHERE status != 'running'");
+            foreach ($completed as $c) {
+                @unlink(__DIR__ . '/data/scraper_' . $c['id'] . '.log');
+            }
+            DB::exec("DELETE FROM scraper_tasks WHERE status != 'running'");
+            View::setFlash("Cleaned up completed tasks.", 'ok');
+        }
+        Router::redirect('/scraper');
+    }
+
+    $tasks = DB::rows('SELECT * FROM scraper_tasks ORDER BY created_at DESC LIMIT 50');
+    
+    // Update status for running tasks
+    foreach ($tasks as &$task) {
+        if ($task['status'] === 'running' && $task['pid'] > 0) {
+            $isRunning = file_exists('/proc/' . $task['pid']);
+            if (!$isRunning) {
+                DB::exec("UPDATE scraper_tasks SET status = 'completed' WHERE id = ?", [$task['id']]);
+                $task['status'] = 'completed';
+            }
+        }
+    }
+    unset($task);
+
+    View::header('Scraper', $user);
+    View::flash();
+    
+    echo '<h1>Scraper Management</h1>';
+    
+    echo '<div class="form-container">';
+    echo '<h2>Start New Scraper</h2>';
+    echo '<form method="post" action="' . View::url('/scraper') . '">';
+    echo '  <input type="hidden" name="csrf_token" value="' . View::e(View::csrfToken()) . '">';
+    echo '  <input type="hidden" name="action" value="start">';
+    echo '  <div class="form-group">';
+    echo '    <label>Tag to scrape</label>';
+    echo '    <input type="text" name="tag" required placeholder="e.g. femboy">';
+    echo '  </div>';
+    echo '  <button type="submit" class="button">Start Scraper</button>';
+    echo '</form>';
+    echo '</div>';
+
+    echo '<h2>Recent Tasks</h2>';
+    if ($tasks) {
+        echo '<form method="post" action="' . View::url('/scraper') . '" style="margin-bottom: 10px;">';
+        echo '  <input type="hidden" name="csrf_token" value="' . View::e(View::csrfToken()) . '">';
+        echo '  <input type="hidden" name="action" value="clean">';
+        echo '  <button type="submit" class="button">Clean Completed</button>';
+        echo '</form>';
+        
+        echo '<table class="data-table">';
+        echo '<tr><th>ID</th><th>Tag</th><th>PID</th><th>Status</th><th>Started</th><th>Action</th></tr>';
+        foreach ($tasks as $t) {
+            $statusColor = $t['status'] === 'running' ? 'color: orange;' : 'color: green;';
+            echo '<tr>';
+            echo '<td>' . $t['id'] . '</td>';
+            echo '<td>' . View::e($t['tag']) . '</td>';
+            echo '<td>' . $t['pid'] . '</td>';
+            echo '<td style="font-weight:bold; ' . $statusColor . '">' . View::e($t['status']) . '</td>';
+            echo '<td>' . date('Y-m-d H:i:s', $t['created_at']) . '</td>';
+            echo '<td><a href="' . View::url('/scraper', ['log_id' => $t['id']]) . '">View Log</a></td>';
+            echo '</tr>';
+        }
+        echo '</table>';
+    } else {
+        echo '<p>No scraper tasks found.</p>';
+    }
+
+    if (isset($_GET['log_id'])) {
+        $logId = (int)$_GET['log_id'];
+        $logFile = __DIR__ . '/data/scraper_' . $logId . '.log';
+        echo '<h2 id="log">Log for Task #' . $logId . ' <a href="' . View::url('/scraper') . '">(Close)</a></h2>';
+        echo '<div style="background: #111; color: #ccc; padding: 10px; border-radius: 5px; height: 400px; overflow-y: auto; font-family: monospace; white-space: pre-wrap;">';
+        if (file_exists($logFile)) {
+            echo View::e(file_get_contents($logFile));
+        } else {
+            echo 'Log file not found or empty.';
+        }
+        echo '</div>';
+        
+        // Auto-scroll to bottom of log div
+        echo '<script>
+            var logDiv = document.querySelector("#log").nextElementSibling;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            location.hash = "#log";
+        </script>';
+    }
+
+    View::footer();
 }
 
 function page_admin(?array $user, string $method): void

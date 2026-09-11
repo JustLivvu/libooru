@@ -79,6 +79,14 @@ class DB
                 PRIMARY KEY (post_id, user_id)
             );
 
+            CREATE TABLE IF NOT EXISTS scraper_tasks (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                tag        TEXT NOT NULL,
+                pid        INTEGER,
+                status     TEXT NOT NULL DEFAULT 'running',
+                created_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+
             CREATE TABLE IF NOT EXISTS favorites (
                 user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 post_id    INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
