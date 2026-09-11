@@ -617,12 +617,14 @@ function page_login(?array $user, string $method): void
     View::header('Login', null);
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
     echo '<h1>Login</h1>';
-    echo '<form method="post">';
+    echo '<form method="post" style="display: flex; flex-direction: column; gap: 16px; max-width: 300px;">';
     View::csrfField();
-    echo '<label>Username<br><input name="name" required autofocus></label><br>';
-    echo '<label>Password<br><input type="password" name="password" required></label><br>';
-    echo '<button>Login</button> ';
-    echo '<a href="' . View::url('/register') . '">Register</a>';
+    echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Username</span><input name="name" required autofocus></label>';
+    echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Password</span><input type="password" name="password" required></label>';
+    echo '<div style="display: flex; align-items: center; gap: 16px;">';
+    echo '<button type="submit">Login</button>';
+    echo '<a href="' . View::url('/register') . '" style="font-size: 13px; color: var(--text-muted);">Register</a>';
+    echo '</div>';
     echo '</form>';
     View::footer();
 }
@@ -655,12 +657,15 @@ function page_register(?array $user, string $method): void
     View::header('Register', null);
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
     echo '<h1>Register</h1>';
-    echo '<form method="post">';
+    echo '<form method="post" style="display: flex; flex-direction: column; gap: 16px; max-width: 300px;">';
     View::csrfField();
-    echo '<label>Username (2–32 chars)<br><input name="name" required autofocus></label><br>';
-    echo '<label>Password (min 4 chars)<br><input type="password" name="password" required></label><br>';
-    echo '<label>Email (optional)<br><input type="email" name="email"></label><br>';
-    echo '<button>Register</button>';
+    echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Username (2–32 chars)</span><input name="name" required autofocus></label>';
+    echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Password (min 4 chars)</span><input type="password" name="password" required></label>';
+    echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Email (optional)</span><input type="email" name="email"></label>';
+    echo '<div style="display: flex; align-items: center; gap: 16px;">';
+    echo '<button type="submit">Register</button>';
+    echo '<a href="' . View::url('/login') . '" style="font-size: 13px; color: var(--text-muted);">Back to login</a>';
+    echo '</div>';
     echo '</form>';
     View::footer();
 }
