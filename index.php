@@ -241,6 +241,9 @@ function page_home(?array $user): void
 
 function page_posts(?array $user): void
 {
+    if (!$user && View::siteSetting('require_login_posts', '0') === '1') {
+        Router::redirect('/login');
+    }
     $page   = max(1, (int)($_GET['page'] ?? 1));
     $q       = trim($_GET['q'] ?? '');
     $rating  = $_GET['rating'] ?? '';
@@ -285,6 +288,9 @@ function page_posts(?array $user): void
 
 function page_post(?array $user, int $id): void
 {
+    if (!$user && View::siteSetting('require_login_posts', '0') === '1') {
+        Router::redirect('/login');
+    }
     $post = Post::getById($id);
     if (!$post) {
         http_response_code(404);
@@ -623,6 +629,12 @@ function page_login(?array $user, string $method): void
 
 function page_register(?array $user, string $method): void
 {
+    if (View::siteSetting('disable_registrations', '0') === '1') {
+        View::header('Register', null);
+        echo '<p>Registrations are currently disabled.</p>';
+        View::footer();
+        return;
+    }
     if ($user) Router::redirect('/');
     $error = '';
 
@@ -955,6 +967,12 @@ function page_admin(?array $user, string $method): void
             View::setSiteSetting('s3_access_key', $accessKey);
             View::setSiteSetting('s3_secret_key', $secretKey);
             View::setFlash('Storage settings saved.', 'ok');
+        } elseif ($action === 'registrations_settings') {
+            $disableReg = isset($_POST['disable_registrations']) ? '1' : '0';
+            $requireLogin = isset($_POST['require_login_posts']) ? '1' : '0';
+            View::setSiteSetting('disable_registrations', $disableReg);
+            View::setSiteSetting('require_login_posts', $requireLogin);
+            View::setFlash('Registrations & Content settings saved.', 'ok');
         }
 
         Router::redirect('/admin');
@@ -1047,6 +1065,22 @@ function page_admin(?array $user, string $method): void
     echo '</div>';
 
     echo '<button style="align-self:flex-start;">Save Storage Settings</button>';
+    echo '</form>';
+
+    // Registrations & Content settings
+    $curDisableReg = View::siteSetting('disable_registrations', '0');
+    $curRequireLogin = View::siteSetting('require_login_posts', '0');
+    echo '<h2>Registrations & Content</h2>';
+    echo '<form method="post" style="max-width:500px; display:flex; flex-direction:column; gap:15px; margin-bottom: 20px;">';
+    View::csrfField();
+    echo '<input type="hidden" name="action" value="registrations_settings">';
+    echo '<label style="display:flex; align-items:center; gap:5px;">';
+    echo '<input type="checkbox" name="disable_registrations" value="1"' . ($curDisableReg === '1' ? ' checked' : '') . '> ';
+    echo '<span>Turn off registrations</span></label>';
+    echo '<label style="display:flex; align-items:center; gap:5px;">';
+    echo '<input type="checkbox" name="require_login_posts" value="1"' . ($curRequireLogin === '1' ? ' checked' : '') . '> ';
+    echo '<span>Forbid viewing posts for logged out users</span></label>';
+    echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
 
     // Users table

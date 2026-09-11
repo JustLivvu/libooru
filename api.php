@@ -129,6 +129,9 @@ class Api
 
     private function getPosts(): void
     {
+        if (!$this->authUser && View::siteSetting('require_login_posts', '0') === '1') {
+            throw new RuntimeException('Unauthorized', 401);
+        }
         $page    = max(1, (int)($_GET['page'] ?? 1));
         $limit   = min(100, max(1, (int)($_GET['limit'] ?? POSTS_PER_PAGE)));
         $tags    = array_filter(preg_split('/[\s,]+/', trim($_GET['tags'] ?? ''), -1, PREG_SPLIT_NO_EMPTY));
@@ -147,6 +150,9 @@ class Api
 
     private function getPost(int $id): void
     {
+        if (!$this->authUser && View::siteSetting('require_login_posts', '0') === '1') {
+            throw new RuntimeException('Unauthorized', 401);
+        }
         $post = Post::getById($id);
         if (!$post) throw new RuntimeException('Post not found', 404);
 
