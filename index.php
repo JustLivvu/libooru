@@ -823,7 +823,14 @@ function page_scraper(?array $user, string $method): void
     // Update status for running tasks
     foreach ($tasks as &$task) {
         if ($task['status'] === 'running' && $task['pid'] > 0) {
-            $isRunning = file_exists('/proc/' . $task['pid']);
+            // A numeric PID alone is not reliable: after the scraper exits the
+            // operating system may reuse it for an unrelated process.  Confirm
+            // that it is still this exact PHP scraper task.
+            $cmdline = @file_get_contents('/proc/' . (int)$task['pid'] . '/cmdline');
+            $expectedTaskArg = "\0--task-id\0" . (int)$task['id'] . "\0";
+            $isRunning = is_string($cmdline)
+                && str_contains($cmdline, 'realbooru.php')
+                && str_contains($cmdline, $expectedTaskArg);
             if (!$isRunning) {
                 DB::exec("UPDATE scraper_tasks SET status = 'completed' WHERE id = ?", [$task['id']]);
                 $task['status'] = 'completed';
