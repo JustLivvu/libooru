@@ -409,7 +409,7 @@ class RealbooruDownloader:
     BASE_URL = "https://realbooru.com/index.php"
     USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-    def __init__(self, tag="femboy", extra_tag="realbooru", limit=0, threads=10, db_path="data/libooru.db", data_dir="data", max_consecutive_skips=100, api_url="http://localhost:3000/api/v1", api_key="bce0bb3c90f0ca637ca810c21ec55cf2", use_api=True):
+    def __init__(self, tag="femboy", extra_tag="realbooru", limit=0, threads=10, db_path="data/libooru.db", data_dir="data", max_consecutive_skips=100, api_url="http://localhost:3000/api/v1", api_key="bce0bb3c90f0ca637ca810c21ec55cf2", use_api=True, reset_cache=False):
         self.tag = tag
         self.extra_tag = extra_tag
         self.limit = limit
@@ -422,11 +422,23 @@ class RealbooruDownloader:
         self.use_api = use_api
         self.uploads_dir = os.path.join(data_dir, "uploads")
         self.thumbs_dir = os.path.join(data_dir, "thumbs")
-
+        # Path for scraper cache
+        self.cache_path = os.path.join(data_dir, "scraper_cache.json")
+        # Optionally reset cache
+        if reset_cache and os.path.exists(self.cache_path):
+            os.remove(self.cache_path)
+        # Load last processed pid from cache if available
+        self.last_pid = 0
+        if os.path.exists(self.cache_path):
+            try:
+                with open(self.cache_path, "r") as f:
+                    data = json.load(f)
+                    self.last_pid = data.get("last_pid", 0)
+            except Exception:
+                self.last_pid = 0
         if not self.use_api:
             os.makedirs(self.uploads_dir, exist_ok=True)
             os.makedirs(self.thumbs_dir, exist_ok=True)
-
         self.db = Database(self.db_path)
 
     def _fetch_html(self, url, retries=5):

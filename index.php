@@ -782,9 +782,7 @@ function page_scraper(?array $user, string $method): void
         if ($action === 'start') {
             $tag = trim($_POST['tag'] ?? '');
             if ($tag !== '') {
-                $script = __DIR__ . '/realbooru_downloader.py';
-                $dbPath = __DIR__ . '/data/libooru.db';
-                $dataDir = __DIR__ . '/data';
+                $script = __DIR__ . '/scrapers/realbooru.php';
                 
                 DB::exec('INSERT INTO scraper_tasks (tag, status) VALUES (?, ?)', [$tag, 'starting']);
                 $taskId = (int)DB::lastId();
@@ -792,11 +790,10 @@ function page_scraper(?array $user, string $method): void
                 
                 // Launch in background and get PID
                 $cmd = sprintf(
-                    'python3 -u %s --tag %s --db %s --data-dir %s > %s 2>&1 & echo $!', 
+                    'php %s --tag %s --task-id %d > %s 2>&1 & echo $!', 
                     escapeshellarg($script), 
                     escapeshellarg($tag),
-                    escapeshellarg($dbPath),
-                    escapeshellarg($dataDir),
+                    $taskId,
                     escapeshellarg($logFile)
                 );
                 $pid = (int)shell_exec($cmd);
