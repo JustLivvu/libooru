@@ -75,6 +75,11 @@ class Auth
         return false;
     }
 
+    public static function hasPendingRegistration(string $name): bool
+    {
+        return (bool)DB::scalar('SELECT id FROM registration_requests WHERE name = ?', [$name]);
+    }
+
     public static function logout(): void
     {
         session_destroy();
@@ -96,6 +101,41 @@ class Auth
             [$name, $hash, $email, $apikey, $defaultBlacklist, trim($registrationReason)]
         );
         return (int)DB::lastId();
+    }
+
+    /** Save a registration for an administrator to approve later. */
+    public static function requestRegistration(string $name, string $password, string $email = '', string $registrationReason = ''): int|false
+    {
+        if (strlen($name) < 2 || strlen($name) > 32 || strlen($password) < 4) return false;
+        if (class_exists('View') && View::siteSetting('require_registration_reason', '0') === '1' && trim($registrationReason) === '') return false;
+        if (DB::scalar('SELECT id FROM users WHERE name = ?', [$name])) return false;
+        if (DB::scalar('SELECT id FROM registration_requests WHERE name = ?', [$name])) return false;
+
+        DB::exec(
+            'INSERT INTO registration_requests (name, password, email, registration_reason) VALUES (?, ?, ?, ?)',
+            [$name, password_hash($password, PASSWORD_DEFAULT), $email, trim($registrationReason)]
+        );
+        return (int)DB::lastId();
+    }
+
+    public static function approveRegistrationRequest(int $requestId): bool
+    {
+        $request = DB::row('SELECT * FROM registration_requests WHERE id = ?', [$requestId]);
+        if (!$request || DB::scalar('SELECT id FROM users WHERE name = ?', [$request['name']])) return false;
+
+        $apiKey = bin2hex(random_bytes(16));
+        $defaultBlacklist = class_exists('View') ? View::siteSetting('default_blacklist', '') : '';
+        DB::exec(
+            'INSERT INTO users (name, password, email, api_key, blacklist, registration_reason) VALUES (?, ?, ?, ?, ?, ?)',
+            [$request['name'], $request['password'], $request['email'], $apiKey, $defaultBlacklist, $request['registration_reason']]
+        );
+        DB::exec('DELETE FROM registration_requests WHERE id = ?', [$requestId]);
+        return true;
+    }
+
+    public static function declineRegistrationRequest(int $requestId): bool
+    {
+        return DB::exec('DELETE FROM registration_requests WHERE id = ?', [$requestId]) > 0;
     }
 
     /** Authenticate via API key (from header or query param). */

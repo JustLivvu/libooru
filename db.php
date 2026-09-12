@@ -99,11 +99,21 @@ class DB
                 value TEXT NOT NULL DEFAULT ''
             );
 
+            CREATE TABLE IF NOT EXISTS registration_requests (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                name                TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                password            TEXT NOT NULL,
+                email               TEXT,
+                registration_reason TEXT NOT NULL DEFAULT '',
+                created_at          INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+
             CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_post_tags_post ON post_tags(post_id);
             CREATE INDEX IF NOT EXISTS idx_post_tags_tag  ON post_tags(tag_id);
             CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
             CREATE INDEX IF NOT EXISTS idx_posts_quality  ON posts(quality);
+            CREATE INDEX IF NOT EXISTS idx_registration_requests_created ON registration_requests(created_at ASC);
         ");
 
         // Add blacklist column to users if missing

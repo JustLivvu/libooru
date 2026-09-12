@@ -610,6 +610,8 @@ function page_login(?array $user, string $method): void
         $pass = $_POST['password'] ?? '';
         if (Auth::login($name, $pass)) {
             Router::redirect('/');
+        } elseif (Auth::hasPendingRegistration($name)) {
+            $error = 'Your account exists but it has not been approved yet.';
         } else {
             $error = 'Invalid username or password.';
         }
@@ -640,7 +642,9 @@ function page_register(?array $user, string $method): void
     }
     if ($user) Router::redirect('/');
     $error = '';
+    $success = '';
     $requireRegistrationReason = View::siteSetting('require_registration_reason', '0') === '1';
+    $requiresRegistrationApproval = View::siteSetting('registration_requires_approval', '0') === '1';
     $registrationReason = '';
 
     if ($method === 'POST') {
@@ -652,19 +656,25 @@ function page_register(?array $user, string $method): void
         $id = false;
         if ($requireRegistrationReason && $registrationReason === '') {
             $error = 'Please provide a reason for registration.';
+        } elseif ($requiresRegistrationApproval) {
+            $requestId = Auth::requestRegistration($name, $pass, $email, $registrationReason);
+            if ($requestId) {
+                $success = 'Your registration request has been sent for approval.';
+            }
         } else {
             $id = Auth::register($name, $pass, $email, $registrationReason);
         }
         if ($id) {
             Auth::login($name, $pass);
             Router::redirect('/');
-        } elseif ($error === '') {
+        } elseif ($error === '' && $success === '') {
             $error = 'Registration failed. Username may be taken or too short (min 2 chars, password min 4 chars).';
         }
     }
 
     View::header('Register', null);
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
+    if ($success) echo '<p class="flash flash-ok">' . View::e($success) . '</p>';
     echo '<h1>Register</h1>';
     echo '<form method="post" style="display: flex; flex-direction: column; gap: 16px; max-width: 300px;">';
     View::csrfField();
@@ -987,17 +997,27 @@ function page_admin(?array $user, string $method): void
         } elseif ($action === 'registrations_settings') {
             $disableReg = isset($_POST['disable_registrations']) ? '1' : '0';
             $requireRegistrationReason = isset($_POST['require_registration_reason']) ? '1' : '0';
+            $registrationRequiresApproval = isset($_POST['registration_requires_approval']) ? '1' : '0';
             $requireLogin = isset($_POST['require_login_posts']) ? '1' : '0';
             View::setSiteSetting('disable_registrations', $disableReg);
             View::setSiteSetting('require_registration_reason', $requireRegistrationReason);
+            View::setSiteSetting('registration_requires_approval', $registrationRequiresApproval);
             View::setSiteSetting('require_login_posts', $requireLogin);
             View::setFlash('Registrations & Content settings saved.', 'ok');
+        } elseif ($action === 'approve_registration_request') {
+            $requestId = (int)($_POST['request_id'] ?? 0);
+            $approved = Auth::approveRegistrationRequest($requestId);
+            View::setFlash($approved ? 'Registration request approved.' : 'Could not approve this registration request.', $approved ? 'ok' : 'error');
+        } elseif ($action === 'decline_registration_request') {
+            $requestId = (int)($_POST['request_id'] ?? 0);
+            View::setFlash(Auth::declineRegistrationRequest($requestId) ? 'Registration request declined.' : 'Registration request was not found.', 'ok');
         }
 
         Router::redirect('/admin');
     }
 
     $users        = DB::rows('SELECT id, name, email, registration_reason, role, api_key, created_at FROM users ORDER BY id DESC');
+    $registrationRequests = DB::rows('SELECT id, name, email, registration_reason, created_at FROM registration_requests ORDER BY created_at ASC');
     $postCount    = (int)DB::scalar('SELECT COUNT(*) FROM posts');
     $tagCount     = (int)DB::scalar('SELECT COUNT(*) FROM tags');
     $commentCount = (int)DB::scalar('SELECT COUNT(*) FROM comments');
@@ -1089,6 +1109,7 @@ function page_admin(?array $user, string $method): void
     // Registrations & Content settings
     $curDisableReg = View::siteSetting('disable_registrations', '0');
     $curRequireRegistrationReason = View::siteSetting('require_registration_reason', '0');
+    $curRegistrationRequiresApproval = View::siteSetting('registration_requires_approval', '0');
     $curRequireLogin = View::siteSetting('require_login_posts', '0');
     echo '<h2>Registrations & Content</h2>';
     echo '<form method="post" style="max-width:500px; display:flex; flex-direction:column; gap:15px; margin-bottom: 20px;">';
@@ -1101,10 +1122,36 @@ function page_admin(?array $user, string $method): void
     echo '<input type="checkbox" name="require_registration_reason" value="1"' . ($curRequireRegistrationReason === '1' ? ' checked' : '') . '> ';
     echo '<span>Require a reason for registration</span></label>';
     echo '<label style="display:flex; align-items:center; gap:5px;">';
+    echo '<input type="checkbox" name="registration_requires_approval" value="1"' . ($curRegistrationRequiresApproval === '1' ? ' checked' : '') . '> ';
+    echo '<span>Require administrator approval for registrations</span></label>';
+    echo '<label style="display:flex; align-items:center; gap:5px;">';
     echo '<input type="checkbox" name="require_login_posts" value="1"' . ($curRequireLogin === '1' ? ' checked' : '') . '> ';
     echo '<span>Forbid viewing posts for logged out users</span></label>';
     echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
+
+    // Registration requests
+    echo '<h2>Registration requests</h2>';
+    if (!$registrationRequests) {
+        echo '<p>No pending registration requests.</p>';
+    } else {
+        echo '<div style="overflow-x:auto"><table>';
+        echo '<thead><tr><th>Username</th><th>Email</th><th>Registration reason</th><th>Requested</th><th>Actions</th></tr></thead><tbody>';
+        foreach ($registrationRequests as $request) {
+            echo '<tr><td>' . View::e($request['name']) . '</td>';
+            echo '<td>' . View::e($request['email'] ?: '—') . '</td>';
+            echo '<td>' . View::e($request['registration_reason'] ?: '—') . '</td>';
+            echo '<td>' . View::e(date('Y-m-d H:i', (int)$request['created_at'])) . '</td><td>';
+            echo '<form method="post" style="display:inline">';
+            View::csrfField();
+            echo '<input type="hidden" name="action" value="approve_registration_request"><input type="hidden" name="request_id" value="' . View::e($request['id']) . '"><button>Approve</button></form> ';
+            echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Decline this registration request?\')">';
+            View::csrfField();
+            echo '<input type="hidden" name="action" value="decline_registration_request"><input type="hidden" name="request_id" value="' . View::e($request['id']) . '"><button>Decline</button></form>';
+            echo '</td></tr>';
+        }
+        echo '</tbody></table></div>';
+    }
 
     // Users table
     echo '<h2>Users</h2>';
