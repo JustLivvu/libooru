@@ -88,7 +88,7 @@ HTML;
 
 HTML;
         if ($user) {
-            echo '    <a href="' . $e(SITE_BASE) . '/user/' . $e($user['name']) . '">' . $e($user['name']) . '</a>' . "\n";
+            echo '    <a style="margin-left: auto;" href="' . $e(SITE_BASE) . '/user/' . $e($user['name']) . '">' . $e($user['name']) . '</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/favorites">Favorites</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/settings">Settings</a>' . "\n";
             if ($user['role'] === 'admin') {
@@ -97,7 +97,7 @@ HTML;
             }
             echo '    <a href="' . $e(SITE_BASE) . '/logout">Logout</a>' . "\n";
         } else {
-            echo '    <a href="' . $e(SITE_BASE) . '/login">Login</a>' . "\n";
+            echo '    <a style="margin-left: auto;" href="' . $e(SITE_BASE) . '/login">Login</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/register">Register</a>' . "\n";
         }
         echo <<<HTML

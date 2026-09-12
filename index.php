@@ -202,14 +202,14 @@ function page_home(?array $user): void
     echo '    <a href="' . View::url('/tags') . '">Tags</a>';
     echo '    <a href="' . View::url('/favorites') . '">Favorites</a>';
     if ($user) {
-        echo '    <a href="' . View::url('/user/' . rawurlencode($user['name'])) . '">My Account</a>';
+        echo '    <a style="margin-left: auto;" href="' . View::url('/user/' . rawurlencode($user['name'])) . '">My Account</a>';
         echo '    <a href="' . View::url('/settings') . '">Settings</a>';
         if ($user['role'] === 'admin') {
             echo '    <a href="' . View::url('/admin') . '">Panel</a>';
         }
         echo '    <a href="' . View::url('/logout') . '">Logout</a>';
     } else {
-        echo '    <a href="' . View::url('/login') . '">Login</a>';
+        echo '    <a style="margin-left: auto;" href="' . View::url('/login') . '">Login</a>';
         echo '    <a href="' . View::url('/register') . '">Register</a>';
     }
     echo '  </div>';
