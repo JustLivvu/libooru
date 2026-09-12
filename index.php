@@ -221,10 +221,11 @@ function page_home(?array $user): void
     echo '  </form>';
     
     // Info Links
+    $postCount = (int)DB::scalar('SELECT COUNT(*) FROM posts');
     echo '  <div class="gelbooru-info-links">';
-    echo '    <span>Total visitors: ' . number_format($visitors) . '</span>';
-    echo '    &bull; ';
-    echo '    <span>Running ' . $e($siteName) . '</span>';
+    echo '    <span>Serving ' . number_format($postCount) . ' posts</span>';
+    echo '    - ';
+    echo '    <span>Running Libooru closed source software</span>';
     echo '  </div>';
     
     // Counter Container
