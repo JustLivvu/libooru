@@ -510,7 +510,7 @@ class RealbooruDownloader:
         # Normalize redundant slashes in domain URL
         img_url = re.sub(r'^(https?://realbooru\.com)/+', r'\1/', img_url)
 
-        tags = re.findall(r'<a class=[\"\']tag-type-[^\"\']+[\"\'] href=[\"\'][^\"\']*tags=([^\"\'&>]+)', html)
+        tags = re.findall(r'<a class=[\"\'](?:tag-type-[^\"\']+|model)[\"\'] href=[\"\'][^\"\']*tags=([^\"\'&>]+)', html)
         tags = [urllib.parse.unquote(t) for t in tags]
 
         # Explicitly ensure the extra_tag ('realbooru') is added

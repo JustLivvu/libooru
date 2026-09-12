@@ -925,6 +925,25 @@ function page_scraper(?array $user, string $method): void
             } else {
                 View::setFlash("Tag cannot be empty.", 'error');
             }
+        } elseif ($action === 'fetch_tags') {
+            $script = __DIR__ . '/scrapers/realbooru_tags_fetcher.php';
+            DB::exec('INSERT INTO scraper_tasks (tag, status) VALUES (?, ?)', ['Tags fetcher (all Realbooru posts)', 'starting']);
+            $taskId = (int)DB::lastId();
+            $logFile = __DIR__ . '/data/scraper_' . $taskId . '.log';
+            $cmd = sprintf(
+                'php %s --task-id %d > %s 2>&1 & echo $!',
+                escapeshellarg($script),
+                $taskId,
+                escapeshellarg($logFile)
+            );
+            $pid = (int)shell_exec($cmd);
+            if ($pid > 0) {
+                DB::exec('UPDATE scraper_tasks SET pid = ?, status = ? WHERE id = ?', [$pid, 'running', $taskId]);
+                View::setFlash("Started tags fetcher for all Realbooru posts (PID: $pid)", 'ok');
+            } else {
+                DB::exec('UPDATE scraper_tasks SET status = ? WHERE id = ?', ['error', $taskId]);
+                View::setFlash('Failed to start tags fetcher.', 'error');
+            }
         } elseif ($action === 'clean') {
             $completed = DB::rows("SELECT id FROM scraper_tasks WHERE status != 'running'");
             foreach ($completed as $c) {
@@ -947,7 +966,7 @@ function page_scraper(?array $user, string $method): void
             $cmdline = @file_get_contents('/proc/' . (int)$task['pid'] . '/cmdline');
             $expectedTaskArg = "\0--task-id\0" . (int)$task['id'] . "\0";
             $isRunning = is_string($cmdline)
-                && str_contains($cmdline, 'realbooru.php')
+                && (str_contains($cmdline, 'realbooru.php') || str_contains($cmdline, 'realbooru_tags_fetcher.php'))
                 && str_contains($cmdline, $expectedTaskArg);
             if (!$isRunning) {
                 DB::exec("UPDATE scraper_tasks SET status = 'completed' WHERE id = ?", [$task['id']]);
@@ -972,6 +991,16 @@ function page_scraper(?array $user, string $method): void
     echo '    <input type="text" name="tag" required placeholder="e.g. femboy">';
     echo '  </div>';
     echo '  <button type="submit" class="button">Start Scraper</button>';
+    echo '</form>';
+    echo '</div>';
+
+    echo '<div class="form-container">';
+    echo '<h2>Tags fetcher</h2>';
+    echo '<p>Rechecks every imported Realbooru post and adds any missing source tags, including yellow model tags. Existing tags are kept.</p>';
+    echo '<form method="post" action="' . View::url('/scraper') . '">';
+    echo '  <input type="hidden" name="csrf_token" value="' . View::e(View::csrfToken()) . '">';
+    echo '  <input type="hidden" name="action" value="fetch_tags">';
+    echo '  <button type="submit" class="button" onclick="return confirm(\'Recheck tags for every imported Realbooru post?\')">Start Tags Fetcher</button>';
     echo '</form>';
     echo '</div>';
 

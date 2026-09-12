@@ -173,7 +173,7 @@ while (true) {
         }
         
         $tags = [];
-        if (preg_match_all('/<a class=[\"\']tag-type-[^\"\']+[\"\'] href=[\"\'][^\"\']*tags=([^\"\'&>]+)/i', $viewHtml, $m)) {
+        if (preg_match_all('/<a class=[\"\'](?:tag-type-[^\"\']+|model)[\"\'] href=[\"\'][^\"\']*tags=([^\"\'&>]+)/i', $viewHtml, $m)) {
             foreach ($m[1] as $t) {
                 $tags[] = urldecode($t);
             }
