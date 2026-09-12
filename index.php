@@ -62,9 +62,47 @@ class Router
         }
         $finfo = new finfo(FILEINFO_MIME_TYPE);
         $mime  = $finfo->file($path) ?: 'application/octet-stream';
+        $size = filesize($path);
         header('Content-Type: ' . $mime);
-        header('Content-Length: ' . filesize($path));
+        header('Accept-Ranges: bytes');
         header('Cache-Control: public, max-age=31536000, immutable');
+
+        // Safari on iPhone/iPad requires byte-range responses to seek and play
+        // MP4 files served by PHP instead of directly by the web server.
+        $range = $_SERVER['HTTP_RANGE'] ?? '';
+        if (preg_match('/^bytes=(\d*)-(\d*)$/', $range, $matches)) {
+            if ($matches[1] === '') {
+                $suffixLength = (int)$matches[2];
+                $start = max(0, $size - $suffixLength);
+                $end = $size - 1;
+            } else {
+                $start = (int)$matches[1];
+                $end = $matches[2] === '' ? $size - 1 : min((int)$matches[2], $size - 1);
+            }
+            if ($start > $end || $start >= $size) {
+                http_response_code(416);
+                header('Content-Range: bytes */' . $size);
+                return;
+            }
+
+            $length = $end - $start + 1;
+            http_response_code(206);
+            header('Content-Range: bytes ' . $start . '-' . $end . '/' . $size);
+            header('Content-Length: ' . $length);
+            $handle = fopen($path, 'rb');
+            fseek($handle, $start);
+            $remaining = $length;
+            while ($remaining > 0 && !feof($handle)) {
+                $chunk = fread($handle, min(8192, $remaining));
+                if ($chunk === false) break;
+                echo $chunk;
+                $remaining -= strlen($chunk);
+            }
+            fclose($handle);
+            return;
+        }
+
+        header('Content-Length: ' . $size);
         readfile($path);
     }
 }
@@ -329,7 +367,7 @@ function page_post(?array $user, int $id): void
     echo '<div class="post-image">';
     $ext = pathinfo($post['filename'], PATHINFO_EXTENSION);
     if (in_array(strtolower($ext), ['mp4', 'webm'], true)) {
-        echo '<video src="' . View::e($fileUrl) . '" controls loop></video>';
+        echo '<video src="' . View::e($fileUrl) . '" controls loop playsinline preload="metadata"></video>';
     } else {
         echo '<a href="' . View::e($fileUrl) . '">';
         echo '<img src="' . View::e($fileUrl) . '" alt="post #' . View::e($id) . '">';
@@ -787,7 +825,7 @@ function page_favorites_lucky(?array $user): void
     ';
     
     if ($isVideo) {
-        echo '<video src="' . htmlspecialchars($fileUrl) . '" autoplay loop controls></video>';
+        echo '<video src="' . htmlspecialchars($fileUrl) . '" autoplay loop controls playsinline preload="metadata"></video>';
     } else {
         echo '<img src="' . htmlspecialchars($fileUrl) . '" alt="Lucky Draw Image">';
     }

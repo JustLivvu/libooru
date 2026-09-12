@@ -140,6 +140,12 @@ class S3Client
         $url = $this->getUrl($key);
 
         $headers = $this->createSignedHeaders('GET', $url, '');
+        $range = $_SERVER['HTTP_RANGE'] ?? '';
+        if (preg_match('/^bytes=\d*-\d*$/', $range)) {
+            // Forward Safari's byte-range request to S3. The response headers
+            // are relayed below so the browser receives 206 Partial Content.
+            $headers[] = 'Range: ' . $range;
+        }
         $headerLines = implode("\r\n", $headers);
 
         $context = stream_context_create([
@@ -152,6 +158,15 @@ class S3Client
 
         $fp = @fopen($url, 'rb', false, $context);
         if ($fp) {
+            $meta = stream_get_meta_data($fp);
+            $responseHeaders = $meta['wrapper_data'] ?? [];
+            foreach ($responseHeaders as $header) {
+                if (preg_match('#^HTTP/\d(?:\.\d)?\s+(\d{3})#i', $header, $matches)) {
+                    http_response_code((int)$matches[1]);
+                } elseif (preg_match('/^(Content-Length|Content-Range|Accept-Ranges):/i', $header)) {
+                    header($header, true);
+                }
+            }
             fpassthru($fp);
             fclose($fp);
         }
