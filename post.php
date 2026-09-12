@@ -124,6 +124,33 @@ class Post
         return ['posts' => $posts, 'total' => $total, 'pages' => (int)ceil($total / $perPage)];
     }
 
+    /** List posts for a profile while respecting the current viewer 's blacklist. */
+    public static function listByUser(int $userId, int $page, int $perPage): array
+    {
+        $offset = max(0, $page - 1) * $perPage;
+        $conditions = ['p.user_id = ?'];
+        $params = [$userId];
+
+        $viewer = class_exists('Auth') ? Auth::current() : null;
+        $blacklist = $viewer && !empty($viewer['blacklist'])
+            ? preg_split('/[\s,]+/', strtolower(trim($viewer['blacklist'])), -1, PREG_SPLIT_NO_EMPTY)
+            : [];
+        if ($blacklist) {
+            $placeholders = implode(',', array_fill(0, count($blacklist), '?'));
+            $conditions[] = "p.id NOT IN (SELECT pt.post_id FROM post_tags pt INNER JOIN tags t ON t.id = pt.tag_id WHERE t.name IN ($placeholders) COLLATE NOCASE)";
+            $params = array_merge($params, $blacklist);
+        }
+
+        $where = implode(' AND ', $conditions);
+        $posts = DB::rows(
+            "SELECT p.* FROM posts p WHERE $where ORDER BY p.id DESC LIMIT ? OFFSET ?",
+            array_merge($params, [$perPage, $offset])
+        );
+        $total = (int)DB::scalar("SELECT COUNT(*) FROM posts p WHERE $where", $params);
+
+        return ['posts' => $posts, 'total' => $total, 'pages' => (int)ceil($total / $perPage)];
+    }
+
     // -------- tags --------
 
     public static function tagsFor(int $postId): array
@@ -200,6 +227,9 @@ class Post
         $filename = $md5 . '.' . $ext;
 
         [$w, $h] = Image::getDimensions($file['tmp_name'], $mime);
+        if ($w > 0 && $h > 0 && $w > intdiv(MAX_MEDIA_PIXELS, $h)) {
+            throw new RuntimeException('Media dimensions are too large.', 413);
+        }
         $quality = self::determineQuality($w ?: null, $h ?: null);
 
         // Make temporary thumbnail locally
@@ -284,16 +314,24 @@ class Post
 
     // -------- comments --------
 
-    public static function addComment(int $postId, string $body, ?int $userId, ?string $guestName): int
+    public static function addComment(int $postId, string $body, ?int $userId, ?string $guestName = null): int
     {
+        if (!$userId) {
+            throw new RuntimeException('Authentication is required to comment.', 401);
+        }
         $body = trim($body);
-        if ($body === '') throw new RuntimeException('Comment cannot be empty.');
-        if (!$userId && ($guestName === null || trim($guestName) === '')) {
-            $guestName = 'Anonymous';
+        if ($body === '') {
+            throw new RuntimeException('Comment cannot be empty.', 400);
+        }
+        if (strlen($body) > MAX_COMMENT_LENGTH) {
+            throw new RuntimeException('Comment is too long (maximum ' . MAX_COMMENT_LENGTH . ' bytes).', 413);
+        }
+        if (!self::getById($postId)) {
+            throw new RuntimeException('Post not found.', 404);
         }
         DB::exec(
-            'INSERT INTO comments (post_id, user_id, guest_name, body) VALUES (?, ?, ?, ?)',
-            [$postId, $userId, $guestName ? trim($guestName) : null, $body]
+            'INSERT INTO comments (post_id, user_id, guest_name, body) VALUES (?, ?, NULL, ?)',
+            [$postId, $userId, $body]
         );
         return (int)DB::lastId();
     }

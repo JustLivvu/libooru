@@ -25,10 +25,15 @@ const ALLOWED_TYPES = [
     'video/webm' => 'webm',
 ];
 
-// Max upload size (bytes) — also set in php.ini
-// Realbooru videos are streamed to disk by the scraper, so they do not consume
-// PHP memory.  Keep a generous safety ceiling while allowing the source media.
-define('MAX_FILE_SIZE', 1024 * 1024 * 1024); // 1 GB
+// Resource limits — keep php.ini/client_max_body_size in sync with MAX_FILE_SIZE.
+define('MAX_FILE_SIZE', 100 * 1024 * 1024); // 100 MB
+define('MAX_MEDIA_PIXELS', 50_000_000);
+define('MEDIA_PROCESS_TIMEOUT', 30);
+
+// Comment abuse protection.
+define('MAX_COMMENT_LENGTH', 4_000); // bytes
+define('COMMENT_RATE_LIMIT', 10);
+define('COMMENT_RATE_WINDOW', 60); // seconds
 
 // API key header
 define('API_KEY_HEADER', 'X-API-Key');

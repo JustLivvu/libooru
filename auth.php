@@ -75,6 +75,13 @@ class Auth
         return false;
     }
 
+    /** Stable, non-reversible rate-limit key based on the direct peer address. */
+    public static function requestSubject(): string
+    {
+        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+        return hash('sha256', $ip);
+    }
+
     public static function hasPendingRegistration(string $name): bool
     {
         return (bool)DB::scalar('SELECT id FROM registration_requests WHERE name = ?', [$name]);

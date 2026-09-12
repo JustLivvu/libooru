@@ -409,7 +409,7 @@ class RealbooruDownloader:
     BASE_URL = "https://realbooru.com/index.php"
     USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-    def __init__(self, tag="femboy", extra_tag="realbooru", limit=0, threads=10, db_path="data/libooru.db", data_dir="data", max_consecutive_skips=100, api_url="http://localhost:3000/api/v1", api_key="bce0bb3c90f0ca637ca810c21ec55cf2", use_api=True, reset_cache=False):
+    def __init__(self, tag="femboy", extra_tag="realbooru", limit=0, threads=10, db_path="data/libooru.db", data_dir="data", max_consecutive_skips=100, api_url="http://localhost:3000/api/v1", api_key="", use_api=True, reset_cache=False):
         self.tag = tag
         self.extra_tag = extra_tag
         self.limit = limit
@@ -747,10 +747,12 @@ def main():
     parser.add_argument("--data-dir", default="data", help="Katalog na pobrane pliki i miniaturki w trybie bezpośrednim (domyślnie: data)")
     parser.add_argument("--max-consecutive-skips", type=int, default=100, help="Maksymalna liczba pominiętych postów z rzędu przed zatrzymaniem pobierania (domyślnie: 100, 0 = wyłącz)")
     parser.add_argument("--api-url", default="http://localhost:3000/api/v1", help="URL do API Libooru (domyślnie: http://localhost:3000/api/v1)")
-    parser.add_argument("--api-key", default="bce0bb3c90f0ca637ca810c21ec55cf2", help="Klucz API użytkownika Libooru (domyślnie: bce0bb3c90f0ca637ca810c21ec55cf2)")
+    parser.add_argument("--api-key", default=os.environ.get("LIBOORU_API_KEY", ""), help="Klucz API użytkownika Libooru (lub zmienna LIBOORU_API_KEY)")
     parser.add_argument("--no-api", action="store_true", help="Wyłącz upload przez API i zapisuj pliki lokalnie/bezpośrednio do bazy")
 
     args = parser.parse_args()
+    if not args.no_api and not args.api_key:
+        parser.error("--api-key lub zmienna LIBOORU_API_KEY jest wymagana w trybie API")
 
     downloader = RealbooruDownloader(
         tag=args.tag,

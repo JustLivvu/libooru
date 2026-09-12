@@ -155,6 +155,19 @@ class Storage
      */
     public static function serveFile(string $type, string $filename): void
     {
+        if (View::siteSetting('require_login_posts', '0') === '1' && !Auth::isLoggedIn()) {
+            $apiKey = (string)($_SERVER['HTTP_X_API_KEY'] ?? '');
+            $apiUser = $apiKey !== '' ? Auth::fromApiKey($apiKey) : null;
+            if (!$apiUser) {
+                http_response_code(401);
+                header('Cache-Control: no-store');
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'Authentication required.';
+                return;
+            }
+            Auth::setUser($apiUser);
+        }
+
         $driver = self::getDriver();
         $filename = basename($filename);
 

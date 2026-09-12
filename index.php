@@ -493,15 +493,16 @@ function page_post(?array $user, int $id): void
     }
 
     echo '<h3>Add comment</h3>';
-    echo '<form method="post" action="' . View::url('/post/' . $id) . '">';
-    View::csrfField();
-    echo '<input type="hidden" name="action" value="comment">';
-    if (!$user) {
-        echo '<input name="guest_name" placeholder="Your name (optional)"><br>';
+    if ($user) {
+        echo '<form method="post" action="' . View::url('/post/' . $id) . '">';
+        View::csrfField();
+        echo '<input type="hidden" name="action" value="comment">';
+        echo '<textarea name="body" rows="4" cols="60" maxlength="' . MAX_COMMENT_LENGTH . '" required></textarea><br>';
+        echo '<button>Post comment</button>';
+        echo '</form>';
+    } else {
+        echo '<p><a href="' . View::url('/login') . '">Log in</a> to post a comment.</p>';
     }
-    echo '<textarea name="body" rows="4" cols="60" required></textarea><br>';
-    echo '<button>Post comment</button>';
-    echo '</form>';
     echo '</section>';
 
     View::footer();
@@ -513,10 +514,13 @@ function post_handle(?array $user, int $id): void
     $action = $_POST['action'] ?? '';
 
     if ($action === 'comment') {
-        $body      = $_POST['body'] ?? '';
-        $guestName = $user ? null : ($_POST['guest_name'] ?? 'Anonymous');
+        Auth::require();
+        $body = $_POST['body'] ?? '';
         try {
-            Post::addComment($id, $body, Auth::id(), $guestName);
+            if (!DB::consumeRateLimit('comment', Auth::requestSubject(), COMMENT_RATE_LIMIT, COMMENT_RATE_WINDOW)) {
+                throw new RuntimeException('Too many comments. Please try again later.', 429);
+            }
+            Post::addComment($id, $body, Auth::id());
             View::setFlash('Comment posted.', 'ok');
         } catch (RuntimeException $e) {
             View::setFlash($e->getMessage(), 'error');
@@ -792,6 +796,9 @@ function page_terms(?array $user): void
 
 function page_user(?array $user, string $targetName): void
 {
+    if (!$user && View::siteSetting('require_login_posts', '0') === '1') {
+        Router::redirect('/login');
+    }
     $target = DB::row('SELECT id, name, email, role, api_key, created_at FROM users WHERE name = ?', [$targetName]);
     if (!$target) {
         http_response_code(404);
@@ -801,15 +808,11 @@ function page_user(?array $user, string $targetName): void
         return;
     }
 
-    $page   = max(1, (int)($_GET['page'] ?? 1));
-    $result = Post::list($page, POSTS_PER_PAGE, [], '', 'id DESC');
-    // Filter by user
-    $myPosts = DB::rows(
-        'SELECT * FROM posts WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?',
-        [(int)$target['id'], POSTS_PER_PAGE, ($page - 1) * POSTS_PER_PAGE]
-    );
-    $myTotal = (int)DB::scalar('SELECT COUNT(*) FROM posts WHERE user_id = ?', [(int)$target['id']]);
-    $myPages = (int)ceil($myTotal / POSTS_PER_PAGE);
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $profilePosts = Post::listByUser((int)$target['id'], $page, POSTS_PER_PAGE);
+    $myPosts = $profilePosts['posts'];
+    $myTotal = $profilePosts['total'];
+    $myPages = $profilePosts['pages'];
 
     $isSelf = $user && (int)$user['id'] === (int)$target['id'];
     $favTotal = (int)DB::scalar('SELECT COUNT(*) FROM favorites WHERE user_id = ?', [(int)$target['id']]);

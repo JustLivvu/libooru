@@ -73,7 +73,8 @@ class S3Client
     }
 
     /**
-     * Upload a file or string to S3.
+     * Upload a file or string to S3. Files are streamed by curl and never loaded
+     * into the PHP worker's memory.
      */
     public function putObject(string $key, string $bodyOrPath, string $contentType = 'application/octet-stream', bool $isFile = false): bool
     {
@@ -81,22 +82,63 @@ class S3Client
         $url = $this->getUrl($key);
 
         if ($isFile) {
-            $payload = file_get_contents($bodyOrPath);
-            if ($payload === false) {
-                throw new RuntimeException("Failed to read file for S3 upload: {$bodyOrPath}");
-            }
+            $res = $this->uploadFile($url, $bodyOrPath, $contentType);
         } else {
-            $payload = $bodyOrPath;
+            $headers = $this->createSignedHeaders('PUT', $url, $bodyOrPath, $contentType);
+            $res = $this->httpRequest('PUT', $url, $headers, $bodyOrPath);
         }
 
-        $headers = $this->createSignedHeaders('PUT', $url, $payload, $contentType);
-        $res = $this->httpRequest('PUT', $url, $headers, $payload);
-
         if ($res['code'] < 200 || $res['code'] >= 300) {
-            throw new RuntimeException("S3 Upload failed (HTTP {$res['code']}): {$res['body']}");
+            throw new RuntimeException("S3 upload failed (HTTP {$res['code']}).");
         }
 
         return true;
+    }
+
+    private function uploadFile(string $url, string $path, string $contentType): array
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            throw new RuntimeException('S3 upload source is not readable.');
+        }
+        $payloadHash = hash_file('sha256', $path);
+        $size = filesize($path);
+        if ($payloadHash === false || $size === false) {
+            throw new RuntimeException('Could not inspect the S3 upload source.');
+        }
+
+        $headers = $this->createSignedHeadersForHash('PUT', $url, $payloadHash, $contentType);
+        $headers[] = 'Content-Length: ' . $size;
+        $command = [
+            'curl', '--silent', '--show-error', '--max-time', '300',
+            '--request', 'PUT', '--upload-file', $path,
+            '--output', '/dev/null', '--write-out', '%{http_code}',
+        ];
+        foreach ($headers as $header) {
+            $command[] = '--header';
+            $command[] = $header;
+        }
+        $command[] = $url;
+
+        $pipes = [];
+        $process = proc_open($command, [
+            0 => ['file', '/dev/null', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ], $pipes);
+        if (!is_resource($process)) {
+            throw new RuntimeException('Could not start the streaming S3 upload.');
+        }
+        $statusText = trim((string)stream_get_contents($pipes[1]));
+        $errorText = trim((string)stream_get_contents($pipes[2]));
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exitCode = proc_close($process);
+        $httpCode = ctype_digit($statusText) ? (int)$statusText : 0;
+
+        if ($exitCode !== 0) {
+            throw new RuntimeException('Streaming S3 upload failed: ' . substr($errorText, 0, 300));
+        }
+        return ['code' => $httpCode, 'body' => ''];
     }
 
     /**
@@ -177,6 +219,11 @@ class S3Client
      */
     private function createSignedHeaders(string $method, string $url, string $payload, string $contentType = ''): array
     {
+        return $this->createSignedHeadersForHash($method, $url, hash('sha256', $payload), $contentType);
+    }
+
+    private function createSignedHeadersForHash(string $method, string $url, string $payloadHash, string $contentType = ''): array
+    {
         $parsedUrl = parse_url($url);
         $host   = $parsedUrl['host'] . (isset($parsedUrl['port']) ? ':' . $parsedUrl['port'] : '');
         $path   = $parsedUrl['path'] ?? '/';
@@ -185,8 +232,6 @@ class S3Client
         $time      = time();
         $amzDate   = gmdate('Ymd\THis\Z', $time);
         $dateStamp = gmdate('Ymd', $time);
-
-        $payloadHash = hash('sha256', $payload);
 
         $canonicalHeaders = "host:{$host}\nx-amz-content-sha256:{$payloadHash}\nx-amz-date:{$amzDate}\n";
         $signedHeaders    = "host;x-amz-content-sha256;x-amz-date";

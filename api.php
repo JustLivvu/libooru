@@ -51,9 +51,12 @@ class Api
         if ($key !== '') {
             $this->authUser = Auth::fromApiKey($key);
             if ($this->authUser) {
-                // Inject into Auth static state so Auth::id() works inside Post::upload()
+                // Inject into Auth static state so Auth::id() works inside Post::upload().
                 Auth::setUser($this->authUser);
             }
+        } elseif (Auth::current()) {
+            // Same-origin browser requests may authenticate with the PHP session.
+            $this->authUser = Auth::current();
         }
 
         $uri    = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -129,9 +132,7 @@ class Api
 
     private function getPosts(): void
     {
-        if (!$this->authUser && View::siteSetting('require_login_posts', '0') === '1') {
-            throw new RuntimeException('Unauthorized', 401);
-        }
+        $this->requirePostReadAccess();
         $page    = max(1, (int)($_GET['page'] ?? 1));
         $limit   = min(100, max(1, (int)($_GET['limit'] ?? POSTS_PER_PAGE)));
         $tags    = array_filter(preg_split('/[\s,]+/', trim($_GET['tags'] ?? ''), -1, PREG_SPLIT_NO_EMPTY));
@@ -150,9 +151,7 @@ class Api
 
     private function getPost(int $id): void
     {
-        if (!$this->authUser && View::siteSetting('require_login_posts', '0') === '1') {
-            throw new RuntimeException('Unauthorized', 401);
-        }
+        $this->requirePostReadAccess();
         $post = Post::getById($id);
         if (!$post) throw new RuntimeException('Post not found', 404);
 
@@ -215,6 +214,7 @@ class Api
 
     private function getTags(): void
     {
+        $this->requirePostReadAccess();
         $page   = max(1, (int)($_GET['page'] ?? 1));
         $limit  = min(200, max(1, (int)($_GET['limit'] ?? 50)));
         $q      = trim($_GET['q'] ?? '');
@@ -245,7 +245,8 @@ class Api
 
     private function tagsAutocomplete(): void
     {
-        // Public endpoint — no auth required, but check for user blacklist if logged in
+        $this->requirePostReadAccess();
+        // Apply the current user blacklist.
         $q     = trim($_GET['q'] ?? '');
         $limit = min(10, max(1, (int)($_GET['limit'] ?? 8)));
 
@@ -295,12 +296,17 @@ class Api
 
     private function getComments(int $postId): void
     {
+        $this->requirePostReadAccess();
         $comments = Post::commentsFor($postId);
         echo json_encode(['comments' => $comments]);
     }
 
     private function addComment(int $postId): void
     {
+        $this->requireAuth();
+        if (!DB::consumeRateLimit('comment', Auth::requestSubject(), COMMENT_RATE_LIMIT, COMMENT_RATE_WINDOW)) {
+            throw new RuntimeException('Too many comments. Please try again later.', 429);
+        }
         $body = $this->jsonBody();
         $text = trim($body['body'] ?? '');
         if ($text === '') throw new RuntimeException('Body is required', 400);
@@ -347,6 +353,13 @@ class Api
     }
 
     // ---- helpers ----
+
+    private function requirePostReadAccess(): void
+    {
+        if (View::siteSetting('require_login_posts', '0') === '1' && !$this->authUser) {
+            throw new RuntimeException('Unauthorized', 401);
+        }
+    }
 
     private function requireAuth(): void
     {

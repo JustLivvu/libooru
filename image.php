@@ -42,8 +42,8 @@ class Image
         if (str_starts_with($mime, 'video/')) {
             // Generate video thumbnail using ffmpeg with high quality
             $cmd = sprintf(
-                'ffmpeg -i %s -ss 00:00:00.000 -vframes 1 -vf "scale=\'max(%d,a*%d)\':\'max(%d,%d/a)\',crop=%d:%d" -q:v 2 -y %s 2>/dev/null',
-                escapeshellarg($srcPath), $tw, $tw, $th, $th, $tw, $th, escapeshellarg($destPath)
+                'timeout %ds ffmpeg -i %s -ss 00:00:00.000 -vframes 1 -vf "scale=\'max(%d,a*%d)\':\'max(%d,%d/a)\',crop=%d:%d" -q:v 2 -y %s 2>/dev/null',
+                MEDIA_PROCESS_TIMEOUT, escapeshellarg($srcPath), $tw, $tw, $th, $th, $tw, $th, escapeshellarg($destPath)
             );
             exec($cmd, $output, $ret);
             return $ret === 0 && file_exists($destPath);
@@ -102,8 +102,8 @@ class Image
     {
         if (str_starts_with($mime, 'video/')) {
             $cmd = sprintf(
-                'ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 %s 2>/dev/null',
-                escapeshellarg($path)
+                'timeout %ds ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 %s 2>/dev/null',
+                MEDIA_PROCESS_TIMEOUT, escapeshellarg($path)
             );
             $out = trim(shell_exec($cmd) ?: '');
             if ($out && str_contains($out, 'x')) {

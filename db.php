@@ -108,6 +108,14 @@ class DB
                 created_at          INTEGER NOT NULL DEFAULT (unixepoch())
             );
 
+            CREATE TABLE IF NOT EXISTS rate_limits (
+                bucket       TEXT NOT NULL,
+                subject      TEXT NOT NULL,
+                window_start INTEGER NOT NULL,
+                count        INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (bucket, subject)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_post_tags_post ON post_tags(post_id);
             CREATE INDEX IF NOT EXISTS idx_post_tags_tag  ON post_tags(tag_id);
@@ -197,6 +205,30 @@ class DB
         $st = self::get()->prepare($sql);
         $st->execute($params);
         return $st->rowCount();
+    }
+
+    /** Atomically consume one action from a fixed-window rate limit. */
+    public static function consumeRateLimit(string $bucket, string $subject, int $max, int $windowSeconds): bool
+    {
+        $now = time();
+        $cutoff = $now - $windowSeconds;
+        self::exec(
+            'INSERT INTO rate_limits (bucket, subject, window_start, count) VALUES (?, ?, ?, 1)
+             ON CONFLICT(bucket, subject) DO UPDATE SET
+                 count = CASE WHEN rate_limits.window_start <= ? THEN 1 ELSE rate_limits.count + 1 END,
+                 window_start = CASE WHEN rate_limits.window_start <= ? THEN excluded.window_start ELSE rate_limits.window_start END',
+            [$bucket, $subject, $now, $cutoff, $cutoff]
+        );
+        $count = (int)self::scalar(
+            'SELECT count FROM rate_limits WHERE bucket = ? AND subject = ?',
+            [$bucket, $subject]
+        );
+
+        if (random_int(1, 100) === 1) {
+            self::exec('DELETE FROM rate_limits WHERE window_start < ?', [$now - 86400]);
+        }
+
+        return $count <= $max;
     }
 
     public static function lastId(): string
