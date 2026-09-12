@@ -151,15 +151,23 @@ HTML;
         if ($totalPages <= 10) {
             $pagesToShow = range(1, $totalPages);
         } else {
-            $pagesToShow = range(1, 5);
-            if ($currentPage > 5 && $currentPage < $totalPages - 4) {
-                $pagesToShow[] = $currentPage;
-            }
-            for ($i = $totalPages - 4; $i <= $totalPages; $i++) {
-                $pagesToShow[] = $i;
-            }
-            $pagesToShow = array_unique($pagesToShow);
+            // Keep the current page and its nearby pages visible, while also
+            // preserving direct links to both ends of a long result list.
+            $pagesToShow = array_merge(
+                [1, 2],
+                range(max(1, $currentPage - 2), min($totalPages, $currentPage + 2)),
+                [$totalPages - 1, $totalPages]
+            );
+            $pagesToShow = array_values(array_unique(array_filter(
+                $pagesToShow,
+                fn(int $page) => $page >= 1 && $page <= $totalPages
+            )));
             sort($pagesToShow);
+        }
+
+        if ($currentPage > 1) {
+            $url = self::url($basePath, array_merge($params, ['page' => $currentPage - 1]));
+            echo '<a href="' . self::e($url) . '" aria-label="Previous page">‹ Prev</a> ';
         }
 
         $prev = null;
@@ -168,9 +176,14 @@ HTML;
                 echo '<span class="ellipsis">[ ... ]</span> ';
             }
             $url    = self::url($basePath, array_merge($params, ['page' => $i]));
-            $active = ($i === $currentPage) ? ' class="active"' : '';
+            $active = ($i === $currentPage) ? ' class="active" aria-current="page"' : '';
             echo "<a href=\"{$url}\"{$active}>{$i}</a> ";
             $prev = $i;
+        }
+
+        if ($currentPage < $totalPages) {
+            $url = self::url($basePath, array_merge($params, ['page' => $currentPage + 1]));
+            echo '<a href="' . self::e($url) . '" aria-label="Next page">Next ›</a>';
         }
 
         echo '</nav>';
