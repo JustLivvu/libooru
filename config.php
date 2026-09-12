@@ -5,6 +5,7 @@ define('LIBOORU_ROOT', __DIR__);
 define('DATA_DIR',     LIBOORU_ROOT . '/data');
 define('UPLOAD_DIR',   DATA_DIR . '/uploads');
 define('THUMB_DIR',    DATA_DIR . '/thumbs');
+define('SITE_ASSET_DIR', DATA_DIR . '/site-assets');
 define('DB_PATH',      DATA_DIR . '/libooru.db');
 
 // Site settings

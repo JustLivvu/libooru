@@ -31,6 +31,10 @@ if (str_starts_with($uri, $base . '/static/')) {
     Router::serveFile(LIBOORU_ROOT . '/static', rawurldecode(substr($uri, strlen($base . '/static/'))));
     exit;
 }
+if (str_starts_with($uri, $base . '/site-assets/')) {
+    Router::serveFile(SITE_ASSET_DIR, rawurldecode(substr($uri, strlen($base . '/site-assets/'))));
+    exit;
+}
 
 // API
 if (str_starts_with($uri, $base . '/api/')) {
@@ -104,6 +108,39 @@ class Router
 
         header('Content-Length: ' . $size);
         readfile($path);
+    }
+}
+
+function saveSiteImageUpload(string $field): ?string
+{
+    $upload = $_FILES[$field] ?? null;
+    if (!$upload || $upload['error'] === UPLOAD_ERR_NO_FILE) return null;
+    if ($upload['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($upload['tmp_name'])) {
+        throw new RuntimeException('Could not upload the selected image.');
+    }
+
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($upload['tmp_name']);
+    $extensions = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'];
+    if (!isset($extensions[$mime])) {
+        throw new RuntimeException('Site images must be JPEG, PNG, GIF, or WebP files.');
+    }
+    if (!is_dir(SITE_ASSET_DIR) && !mkdir(SITE_ASSET_DIR, 0755, true) && !is_dir(SITE_ASSET_DIR)) {
+        throw new RuntimeException('Could not create local site-assets directory.');
+    }
+
+    $filename = bin2hex(random_bytes(16)) . '.' . $extensions[$mime];
+    if (!move_uploaded_file($upload['tmp_name'], SITE_ASSET_DIR . '/' . $filename)) {
+        throw new RuntimeException('Could not save the selected image locally.');
+    }
+    chmod(SITE_ASSET_DIR . '/' . $filename, 0644);
+    return SITE_BASE . '/site-assets/' . $filename;
+}
+
+function deleteLocalSiteImage(string $url): void
+{
+    $prefix = SITE_BASE . '/site-assets/';
+    if (str_starts_with($url, $prefix)) {
+        @unlink(SITE_ASSET_DIR . '/' . basename($url));
     }
 }
 
@@ -214,7 +251,7 @@ function page_home(?array $user): void
     $digits = str_split((string)$totalPosts);
     $counterHtml = '';
     foreach ($digits as $digit) {
-        $counterHtml .= '<img src="https://rule34.us/v1/counter/' . $digit . '.gif" alt="' . $digit . '" class="counter-mascot">';
+        $counterHtml .= '<img src="https://xbooru.com/counter/' . $digit . '.gif" alt="' . $digit . '" class="counter-mascot">';
     }
 
     // Visitor counter
@@ -230,8 +267,12 @@ function page_home(?array $user): void
 
     echo '<div class="gelbooru-home">';
     
-    // Logo
-    echo '  <h1 class="gelbooru-title">' . $e($siteName) . '</h1>';
+    $homeHeaderImage = View::siteSetting('home_header_image');
+    if ($homeHeaderImage) {
+        echo '  <img class="gelbooru-home-header" src="' . $e($homeHeaderImage) . '" alt="' . $e($siteName) . '">';
+    } else {
+        echo '  <h1 class="gelbooru-title">' . $e($siteName) . '</h1>';
+    }
     
     // Sub-navigation
     echo '  <div class="gelbooru-subnav">';
@@ -1009,12 +1050,21 @@ function page_admin(?array $user, string $method): void
             View::setFlash('API key regenerated.', 'ok');
         } elseif ($action === 'site_settings') {
             $name    = trim($_POST['site_name'] ?? '');
-            $logo    = trim($_POST['site_logo'] ?? '');
-            $banner  = trim($_POST['site_banner'] ?? '');
             $default = trim($_POST['default_blacklist'] ?? '');
             if ($name !== '') View::setSiteSetting('site_name', $name);
-            View::setSiteSetting('site_logo',   $logo);
-            View::setSiteSetting('site_banner', $banner);
+            foreach (['site_logo_upload' => 'site_logo', 'site_banner_upload' => 'site_banner', 'home_header_upload' => 'home_header_image'] as $field => $setting) {
+                $oldImage = View::siteSetting($setting);
+                if (isset($_POST['clear_' . $setting])) {
+                    View::setSiteSetting($setting, '');
+                    deleteLocalSiteImage($oldImage);
+                } else {
+                    $newImage = saveSiteImageUpload($field);
+                    if ($newImage !== null) {
+                        View::setSiteSetting($setting, $newImage);
+                        deleteLocalSiteImage($oldImage);
+                    }
+                }
+            }
             View::setSiteSetting('default_blacklist', $default);
             View::setFlash('Site settings saved.', 'ok');
         } elseif ($action === 'storage_settings') {
@@ -1063,6 +1113,7 @@ function page_admin(?array $user, string $method): void
     $curName             = View::siteSetting('site_name', SITE_NAME);
     $curLogo             = View::siteSetting('site_logo');
     $curBanner           = View::siteSetting('site_banner');
+    $curHomeHeaderImage  = View::siteSetting('home_header_image');
     $curDefaultBlacklist = View::siteSetting('default_blacklist', '');
 
     $curStorageDriver = View::siteSetting('storage_driver', 'local');
@@ -1089,13 +1140,17 @@ function page_admin(?array $user, string $method): void
 
     // Site settings
     echo '<h2>Site Settings</h2>';
-    echo '<p style="color:var(--muted-text);font-size:12px">Set logo <strong>or</strong> banner — if logo is set it takes priority. Leave blank to show site name as text.</p>';
-    echo '<form method="post" style="max-width:500px; display:flex; flex-direction:column; gap:15px;">';
+    echo '<p style="color:var(--muted-text);font-size:12px">All site images are saved in local storage.</p>';
+    echo '<form method="post" enctype="multipart/form-data" style="max-width:500px; display:flex; flex-direction:column; gap:15px;">';
     View::csrfField();
     echo '<input type="hidden" name="action" value="site_settings">';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Site name</span><input name="site_name" value="' . View::e($curName) . '" style="width:100%"></label>';
-    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Logo URL <small>(small icon, ~32px tall)</small></span><input name="site_logo" value="' . View::e($curLogo) . '" style="width:100%" placeholder="https://…"></label>';
-    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Banner URL <small>(used instead of logo, ~40px tall)</small></span><input name="site_banner" value="' . View::e($curBanner) . '" style="width:100%" placeholder="https://…"></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Navbar logo <small>(saved locally)</small></span><input type="file" name="site_logo_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
+    if ($curLogo) echo '<label><input type="checkbox" name="clear_site_logo"> Remove current navbar logo</label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Navbar banner <small>(saved locally; used when no logo is set)</small></span><input type="file" name="site_banner_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
+    if ($curBanner) echo '<label><input type="checkbox" name="clear_site_banner"> Remove current navbar banner</label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Homepage header <small>(shown on / instead of the site-name text; saved locally)</small></span><input type="file" name="home_header_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
+    if ($curHomeHeaderImage) echo '<label><input type="checkbox" name="clear_home_header_image"> Remove current homepage header</label>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Default Blacklist Tags for New Users <small>(space or line separated)</small></span><textarea name="default_blacklist" rows="2" style="width:100%" placeholder="e.g. nsfw gore">' . View::e($curDefaultBlacklist) . '</textarea></label>';
     echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';

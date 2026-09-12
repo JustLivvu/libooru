@@ -70,7 +70,7 @@ class View
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{$e($title)} - {$e($siteName)}</title>
-<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v=2">
+<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v=8">
 <script src="{$e(SITE_BASE)}/static/autocomplete.js" defer></script>
 </head>
 <body>
