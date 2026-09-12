@@ -70,13 +70,18 @@ class View
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{$e($title)} - {$e($siteName)}</title>
-<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css">
+<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v=2">
 <script src="{$e(SITE_BASE)}/static/autocomplete.js" defer></script>
 </head>
 <body>
 <header>
   <nav>
     <a href="{$e(SITE_BASE)}/">{$brand}</a>
+HTML;
+        if ($sidebarTags !== null) {
+            echo '    <button class="navbar-hamburger" type="button" onclick="document.getElementById(\'sidebar\').classList.toggle(\'open\')">☰</button>' . "\n";
+        }
+        echo <<<HTML
     <a href="{$e(SITE_BASE)}/posts">Browse</a>
     <a href="{$e(SITE_BASE)}/upload">Upload</a>
     <a href="{$e(SITE_BASE)}/tags">Tags</a>

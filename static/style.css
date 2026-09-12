@@ -683,3 +683,82 @@ footer {
   font-size: 12px;
   margin-top: 48px;
 }
+
+/* ── Mobile Responsiveness ────────────────────────────────────────────────── */
+@media (max-width: 850px) {
+  #container {
+    flex-direction: column;
+    padding: 12px;
+    gap: 20px;
+  }
+
+  #sidebar {
+    width: 100%;
+    order: 2; /* Show tags below the image/posts on mobile */
+  }
+
+  main {
+    width: 100%;
+    order: 1;
+  }
+
+  .post-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .post-image {
+    padding: 8px;
+    margin-bottom: 16px;
+  }
+
+  .post-info {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .post-info dt {
+    margin-top: 8px;
+  }
+  .post-info dt:first-child {
+    margin-top: 0;
+  }
+
+  header nav {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .post-actions {
+    justify-content: center;
+  }
+
+  /* Hamburger Navbar Toggle */
+  #sidebar {
+    display: none;
+    width: 100%;
+    order: 2; /* Show tags below the image/posts on mobile */
+  }
+  #sidebar.open {
+    display: block;
+  }
+  
+  .navbar-hamburger {
+    display: inline-block;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    font-size: 18px;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    margin-right: 8px;
+  }
+}
+
+/* Hide hamburger on desktop */
+@media (min-width: 851px) {
+  .navbar-hamburger {
+    display: none;
+  }
+}
