@@ -124,7 +124,7 @@ class Post
         return ['posts' => $posts, 'total' => $total, 'pages' => (int)ceil($total / $perPage)];
     }
 
-    /** List posts for a profile while respecting the current viewer 's blacklist. */
+    /** List posts for a profile while respecting the current viewer's blacklist. */
     public static function listByUser(int $userId, int $page, int $perPage): array
     {
         $offset = max(0, $page - 1) * $perPage;
@@ -314,7 +314,7 @@ class Post
 
     // -------- comments --------
 
-    public static function addComment(int $postId, string $body, ?int $userId, ?string $guestName = null): int
+    public static function addComment(int $postId, string $body, ?int $userId): int
     {
         if (!$userId) {
             throw new RuntimeException('Authentication is required to comment.', 401);

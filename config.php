@@ -27,7 +27,7 @@ const ALLOWED_TYPES = [
 
 // Resource limits — keep php.ini/client_max_body_size in sync with MAX_FILE_SIZE.
 define('MAX_FILE_SIZE', 100 * 1024 * 1024); // 100 MB
-define('MAX_MEDIA_PIXELS', 50_000_000);
+define('MAX_MEDIA_PIXELS', 20_000_000);
 define('MEDIA_PROCESS_TIMEOUT', 30);
 
 // Comment abuse protection.

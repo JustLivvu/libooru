@@ -23,7 +23,7 @@ require_once __DIR__ . '/view.php';
  *   GET    /api/v1/tags           list tags (page, limit, q)
  *
  *   GET    /api/v1/comments/{postId}   list comments for post
- *   POST   /api/v1/comments/{postId}   add comment (body, guest_name)
+ *   POST   /api/v1/comments/{postId}   add comment (authenticated; body)
  *   DELETE /api/v1/comments/{id}       delete comment (admin)
  *
  *   POST   /api/v1/votes/{postId}      vote (value: 1 or -1)
@@ -311,8 +311,7 @@ class Api
         $text = trim($body['body'] ?? '');
         if ($text === '') throw new RuntimeException('Body is required', 400);
         $userId    = $this->authUser ? (int)$this->authUser['id'] : null;
-        $guestName = $body['guest_name'] ?? null;
-        $id = Post::addComment($postId, $text, $userId, $guestName);
+        $id = Post::addComment($postId, $text, $userId);
         http_response_code(201);
         echo json_encode(['id' => $id]);
     }

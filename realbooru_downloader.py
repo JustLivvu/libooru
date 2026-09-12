@@ -636,7 +636,7 @@ class RealbooruDownloader:
         print(f"Baza danych  : '{self.db_path}'")
         if self.use_api:
             print(f"Tryb zapisu  : API Libooru ({self.api_url})")
-            print(f"Klucz API    : {self.api_key[:6]}...{self.api_key[-4:]}")
+            print("Klucz API    : <configured>")
         else:
             print(f"Tryb zapisu  : Bezpośredni zapis do pliku ({self.data_dir})")
         print(f"Limit postów : {self.limit if self.limit > 0 else 'Brak limitu (wszystkie strony)'}")
