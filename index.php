@@ -719,16 +719,16 @@ function page_user(?array $user, string $targetName): void
     View::header('User: ' . $target['name'], $user);
     View::flash();
     echo '<h1>User: ' . View::e($target['name']) . '</h1>';
-    echo '<dl>';
-    echo '<dt>Role</dt><dd>' . View::e($target['role']) . '</dd>';
-    echo '<dt>Member since</dt><dd>' . date('Y-m-d', (int)$target['created_at']) . '</dd>';
-    echo '<dt>Posts</dt><dd>' . $myTotal . '</dd>';
-    echo '<dt>Favorites</dt><dd>' . $favTotal . '</dd>';
+    echo '<div style="overflow-x:auto; max-width:560px; margin-bottom:24px;"><table style="width:100%; border-collapse:collapse;">';
+    echo '<tbody>';
+    echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border); width:40%;">Role</th><td style="padding:8px 12px; border:1px solid var(--border);">' . View::e($target['role']) . '</td></tr>';
+    echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border);">Member since</th><td style="padding:8px 12px; border:1px solid var(--border);">' . View::e(date('Y-m-d', (int)$target['created_at'])) . '</td></tr>';
+    echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border);">Posts</th><td style="padding:8px 12px; border:1px solid var(--border);">' . $myTotal . '</td></tr>';
+    echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border);">Favorites</th><td style="padding:8px 12px; border:1px solid var(--border);">' . $favTotal . '</td></tr>';
     if ($isSelf) {
-        echo '<dt>Email</dt><dd>' . View::e($target['email'] ?: '—') . '</dd>';
-        echo '<dt>API Key</dt><dd><code>' . View::e($target['api_key']) . '</code></dd>';
+        echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border);">Email</th><td style="padding:8px 12px; border:1px solid var(--border);">' . View::e($target['email'] ?: '—') . '</td></tr>';
     }
-    echo '</dl>';
+    echo '</tbody></table></div>';
     echo '<h2>Posts</h2>';
     View::postGrid($myPosts);
     View::paginator($page, $myPages, '/user/' . rawurlencode($target['name']));
