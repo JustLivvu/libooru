@@ -222,6 +222,10 @@ function dispatch(string $method, string $path): void
     elseif ($path === '/register') {
         page_register($user, $method);
     }
+    // Terms of Service
+    elseif ($path === '/terms') {
+        page_terms($user);
+    }
     // User profile
     elseif (preg_match('#^/user/([^/]+)$#', $path, $m)) {
         page_user($user, rawurldecode($m[1]));
@@ -722,6 +726,7 @@ function page_register(?array $user, string $method): void
     if ($user) Router::redirect('/');
     $error = '';
     $success = '';
+    $acceptedTerms = false;
     $requireRegistrationReason = View::siteSetting('require_registration_reason', '0') === '1';
     $requiresRegistrationApproval = View::siteSetting('registration_requires_approval', '0') === '1';
     $registrationReason = '';
@@ -732,8 +737,11 @@ function page_register(?array $user, string $method): void
         $pass  = $_POST['password'] ?? '';
         $email = trim($_POST['email'] ?? '');
         $registrationReason = trim($_POST['registration_reason'] ?? '');
+        $acceptedTerms = isset($_POST['accept_terms']);
         $id = false;
-        if ($requireRegistrationReason && $registrationReason === '') {
+        if (!$acceptedTerms) {
+            $error = 'You must accept the Terms of Service to register.';
+        } elseif ($requireRegistrationReason && $registrationReason === '') {
             $error = 'Please provide a reason for registration.';
         } elseif ($requiresRegistrationApproval) {
             $requestId = Auth::requestRegistration($name, $pass, $email, $registrationReason);
@@ -763,11 +771,22 @@ function page_register(?array $user, string $method): void
     if ($requireRegistrationReason) {
         echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Reason for registration</span><textarea name="registration_reason" required rows="4">' . View::e($registrationReason) . '</textarea></label>';
     }
+    echo '<label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="accept_terms" value="1" required' . ($acceptedTerms ? ' checked' : '') . '> <span>I accept <a href="' . View::url('/terms') . '" target="_blank" rel="noopener" style="text-decoration:underline;">Terms of Service</a></span></label>';
     echo '<div style="display: flex; align-items: center; gap: 16px;">';
     echo '<button type="submit">Register</button>';
     echo '<a href="' . View::url('/login') . '" style="font-size: 13px; color: var(--text-muted);">Back to login</a>';
     echo '</div>';
     echo '</form>';
+    View::footer();
+}
+
+function page_terms(?array $user): void
+{
+    $terms = trim(View::siteSetting('terms_of_service', ''));
+    if ($terms === '') $terms = 'Terms of Service have not been published yet.';
+    View::header('Terms of Service', $user);
+    echo '<h1>Terms of Service</h1>';
+    echo '<div style="max-width:800px; white-space:pre-wrap; line-height:1.6;">' . View::e($terms) . '</div>';
     View::footer();
 }
 
@@ -1080,6 +1099,7 @@ function page_admin(?array $user, string $method): void
         } elseif ($action === 'site_settings') {
             $name    = trim($_POST['site_name'] ?? '');
             $default = trim($_POST['default_blacklist'] ?? '');
+            $terms   = trim($_POST['terms_of_service'] ?? '');
             if ($name !== '') View::setSiteSetting('site_name', $name);
             foreach (['site_logo_upload' => 'site_logo', 'site_banner_upload' => 'site_banner', 'home_header_upload' => 'home_header_image'] as $field => $setting) {
                 $oldImage = View::siteSetting($setting);
@@ -1095,6 +1115,7 @@ function page_admin(?array $user, string $method): void
                 }
             }
             View::setSiteSetting('default_blacklist', $default);
+            View::setSiteSetting('terms_of_service', $terms);
             View::setFlash('Site settings saved.', 'ok');
         } elseif ($action === 'storage_settings') {
             $driver    = in_array($_POST['storage_driver'] ?? '', ['local', 's3'], true) ? $_POST['storage_driver'] : 'local';
@@ -1144,6 +1165,7 @@ function page_admin(?array $user, string $method): void
     $curBanner           = View::siteSetting('site_banner');
     $curHomeHeaderImage  = View::siteSetting('home_header_image');
     $curDefaultBlacklist = View::siteSetting('default_blacklist', '');
+    $curTermsOfService   = View::siteSetting('terms_of_service', '');
 
     $curStorageDriver = View::siteSetting('storage_driver', 'local');
     $curS3Endpoint    = View::siteSetting('s3_endpoint', '');
@@ -1181,6 +1203,7 @@ function page_admin(?array $user, string $method): void
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Homepage header <small>(shown on / instead of the site-name text; saved locally)</small></span><input type="file" name="home_header_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
     if ($curHomeHeaderImage) echo '<label><input type="checkbox" name="clear_home_header_image"> Remove current homepage header</label>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Default Blacklist Tags for New Users <small>(space or line separated)</small></span><textarea name="default_blacklist" rows="2" style="width:100%" placeholder="e.g. nsfw gore">' . View::e($curDefaultBlacklist) . '</textarea></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Terms of Service <small>(shown at /terms)</small></span><textarea name="terms_of_service" rows="12" style="width:100%" placeholder="Write your Terms of Service…">' . View::e($curTermsOfService) . '</textarea></label>';
     echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
 
