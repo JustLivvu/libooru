@@ -640,17 +640,25 @@ function page_register(?array $user, string $method): void
     }
     if ($user) Router::redirect('/');
     $error = '';
+    $requireRegistrationReason = View::siteSetting('require_registration_reason', '0') === '1';
+    $registrationReason = '';
 
     if ($method === 'POST') {
         View::verifyCsrf();
         $name  = trim($_POST['name'] ?? '');
         $pass  = $_POST['password'] ?? '';
         $email = trim($_POST['email'] ?? '');
-        $id = Auth::register($name, $pass, $email);
+        $registrationReason = trim($_POST['registration_reason'] ?? '');
+        $id = false;
+        if ($requireRegistrationReason && $registrationReason === '') {
+            $error = 'Please provide a reason for registration.';
+        } else {
+            $id = Auth::register($name, $pass, $email, $registrationReason);
+        }
         if ($id) {
             Auth::login($name, $pass);
             Router::redirect('/');
-        } else {
+        } elseif ($error === '') {
             $error = 'Registration failed. Username may be taken or too short (min 2 chars, password min 4 chars).';
         }
     }
@@ -663,6 +671,9 @@ function page_register(?array $user, string $method): void
     echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Username (2–32 chars)</span><input name="name" required autofocus></label>';
     echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Password (min 4 chars)</span><input type="password" name="password" required></label>';
     echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Email (optional)</span><input type="email" name="email"></label>';
+    if ($requireRegistrationReason) {
+        echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Reason for registration</span><textarea name="registration_reason" required rows="4">' . View::e($registrationReason) . '</textarea></label>';
+    }
     echo '<div style="display: flex; align-items: center; gap: 16px;">';
     echo '<button type="submit">Register</button>';
     echo '<a href="' . View::url('/login') . '" style="font-size: 13px; color: var(--text-muted);">Back to login</a>';
@@ -975,8 +986,10 @@ function page_admin(?array $user, string $method): void
             View::setFlash('Storage settings saved.', 'ok');
         } elseif ($action === 'registrations_settings') {
             $disableReg = isset($_POST['disable_registrations']) ? '1' : '0';
+            $requireRegistrationReason = isset($_POST['require_registration_reason']) ? '1' : '0';
             $requireLogin = isset($_POST['require_login_posts']) ? '1' : '0';
             View::setSiteSetting('disable_registrations', $disableReg);
+            View::setSiteSetting('require_registration_reason', $requireRegistrationReason);
             View::setSiteSetting('require_login_posts', $requireLogin);
             View::setFlash('Registrations & Content settings saved.', 'ok');
         }
@@ -984,7 +997,7 @@ function page_admin(?array $user, string $method): void
         Router::redirect('/admin');
     }
 
-    $users        = DB::rows('SELECT id, name, email, role, api_key, created_at FROM users ORDER BY id DESC');
+    $users        = DB::rows('SELECT id, name, email, registration_reason, role, api_key, created_at FROM users ORDER BY id DESC');
     $postCount    = (int)DB::scalar('SELECT COUNT(*) FROM posts');
     $tagCount     = (int)DB::scalar('SELECT COUNT(*) FROM tags');
     $commentCount = (int)DB::scalar('SELECT COUNT(*) FROM comments');
@@ -1075,6 +1088,7 @@ function page_admin(?array $user, string $method): void
 
     // Registrations & Content settings
     $curDisableReg = View::siteSetting('disable_registrations', '0');
+    $curRequireRegistrationReason = View::siteSetting('require_registration_reason', '0');
     $curRequireLogin = View::siteSetting('require_login_posts', '0');
     echo '<h2>Registrations & Content</h2>';
     echo '<form method="post" style="max-width:500px; display:flex; flex-direction:column; gap:15px; margin-bottom: 20px;">';
@@ -1084,6 +1098,9 @@ function page_admin(?array $user, string $method): void
     echo '<input type="checkbox" name="disable_registrations" value="1"' . ($curDisableReg === '1' ? ' checked' : '') . '> ';
     echo '<span>Turn off registrations</span></label>';
     echo '<label style="display:flex; align-items:center; gap:5px;">';
+    echo '<input type="checkbox" name="require_registration_reason" value="1"' . ($curRequireRegistrationReason === '1' ? ' checked' : '') . '> ';
+    echo '<span>Require a reason for registration</span></label>';
+    echo '<label style="display:flex; align-items:center; gap:5px;">';
     echo '<input type="checkbox" name="require_login_posts" value="1"' . ($curRequireLogin === '1' ? ' checked' : '') . '> ';
     echo '<span>Forbid viewing posts for logged out users</span></label>';
     echo '<button style="align-self:flex-start;">Save Settings</button>';
@@ -1092,13 +1109,14 @@ function page_admin(?array $user, string $method): void
     // Users table
     echo '<h2>Users</h2>';
     echo '<div style="overflow-x:auto"><table>';
-    echo '<thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>API Key</th><th>Actions</th></tr></thead>';
+    echo '<thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Reason</th><th>Role</th><th>API Key</th><th>Actions</th></tr></thead>';
     echo '<tbody>';
     foreach ($users as $u) {
         echo '<tr>';
         echo '<td>' . View::e($u['id']) . '</td>';
         echo '<td><a href="' . View::url('/user/' . rawurlencode($u['name'])) . '">' . View::e($u['name']) . '</a></td>';
         echo '<td>' . View::e($u['email'] ?: '—') . '</td>';
+        echo '<td>' . View::e($u['registration_reason'] ?: '—') . '</td>';
         echo '<td>' . View::e($u['role']) . '</td>';
         echo '<td><code style="font-size:11px">' . View::e($u['api_key']) . '</code></td>';
         echo '<td style="white-space:nowrap">';

@@ -81,18 +81,19 @@ class Auth
         self::$user = null;
     }
 
-    public static function register(string $name, string $password, string $email = ''): int|false
+    public static function register(string $name, string $password, string $email = '', string $registrationReason = ''): int|false
     {
         if (strlen($name) < 2 || strlen($name) > 32) return false;
         if (strlen($password) < 4) return false;
+        if (class_exists('View') && View::siteSetting('require_registration_reason', '0') === '1' && trim($registrationReason) === '') return false;
         $existing = DB::scalar('SELECT id FROM users WHERE name = ?', [$name]);
         if ($existing) return false;
         $hash   = password_hash($password, PASSWORD_DEFAULT);
         $apikey = bin2hex(random_bytes(16));
         $defaultBlacklist = class_exists('View') ? View::siteSetting('default_blacklist', '') : (string)(DB::scalar("SELECT value FROM site_settings WHERE key = 'default_blacklist'") ?: '');
         DB::exec(
-            'INSERT INTO users (name, password, email, api_key, blacklist) VALUES (?, ?, ?, ?, ?)',
-            [$name, $hash, $email, $apikey, $defaultBlacklist]
+            'INSERT INTO users (name, password, email, api_key, blacklist, registration_reason) VALUES (?, ?, ?, ?, ?, ?)',
+            [$name, $hash, $email, $apikey, $defaultBlacklist, trim($registrationReason)]
         );
         return (int)DB::lastId();
     }

@@ -116,6 +116,15 @@ class DB
             $pdo->exec("ALTER TABLE users ADD COLUMN blacklist TEXT NOT NULL DEFAULT ''");
         }
 
+        // Store the optional reason supplied during registration.
+        $hasRegistrationReason = false;
+        foreach ($userCols as $col) {
+            if ($col['name'] === 'registration_reason') { $hasRegistrationReason = true; break; }
+        }
+        if (!$hasRegistrationReason) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN registration_reason TEXT NOT NULL DEFAULT ''");
+        }
+
         // Add quality column if it doesn't exist yet (migration)
         $cols = $pdo->query('PRAGMA table_info(posts)')->fetchAll(PDO::FETCH_ASSOC);
         $hasQuality = false;
