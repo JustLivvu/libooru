@@ -82,6 +82,32 @@ class Auth
         return hash('sha256', $ip);
     }
 
+    public static function verifyTurnstile(string $token, string $secret): bool
+    {
+        if ($token === '' || $secret === '' || strlen($token) > 2048) return false;
+
+        $data = ['secret' => $secret, 'response' => $token];
+        $remoteIp = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+        if ($remoteIp !== '') $data['remoteip'] = $remoteIp;
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
+                'content' => http_build_query($data),
+                'timeout' => 8,
+                'ignore_errors' => true,
+            ],
+        ]);
+        $body = @file_get_contents('https://challenges.cloudflare.com/turnstile/v0/siteverify', false, $context);
+        if ($body === false) return false;
+
+        $result = json_decode($body, true);
+        return is_array($result)
+            && ($result['success'] ?? false) === true
+            && (!isset($result['action']) || $result['action'] === 'register');
+    }
+
     public static function hasPendingRegistration(string $name): bool
     {
         return (bool)DB::scalar('SELECT id FROM registration_requests WHERE name = ?', [$name]);

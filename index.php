@@ -733,6 +733,9 @@ function page_register(?array $user, string $method): void
     $acceptedTerms = false;
     $requireRegistrationReason = View::siteSetting('require_registration_reason', '0') === '1';
     $requiresRegistrationApproval = View::siteSetting('registration_requires_approval', '0') === '1';
+    $registrationCaptchaEnabled = View::siteSetting('enable_registration_captcha', '0') === '1';
+    $turnstileSiteKey = View::siteSetting('turnstile_site_key', '');
+    $turnstileSecretKey = View::siteSetting('turnstile_secret_key', '');
     $registrationReason = '';
 
     if ($method === 'POST') {
@@ -747,6 +750,10 @@ function page_register(?array $user, string $method): void
             $error = 'You must accept the Terms of Service to register.';
         } elseif ($requireRegistrationReason && $registrationReason === '') {
             $error = 'Please provide a reason for registration.';
+        } elseif ($registrationCaptchaEnabled && ($turnstileSiteKey === '' || $turnstileSecretKey === '')) {
+            $error = 'Registration CAPTCHA is not configured correctly. Please contact the administrator.';
+        } elseif ($registrationCaptchaEnabled && !Auth::verifyTurnstile(trim((string)($_POST['cf-turnstile-response'] ?? '')), $turnstileSecretKey)) {
+            $error = 'CAPTCHA verification failed. Please try again.';
         } elseif ($requiresRegistrationApproval) {
             $requestId = Auth::requestRegistration($name, $pass, $email, $registrationReason);
             if ($requestId) {
@@ -764,6 +771,9 @@ function page_register(?array $user, string $method): void
     }
 
     View::header('Register', null);
+    if ($registrationCaptchaEnabled && $turnstileSiteKey !== '') {
+        echo '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>';
+    }
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
     if ($success) echo '<p class="flash flash-ok">' . View::e($success) . '</p>';
     echo '<h1>Register</h1>';
@@ -776,6 +786,9 @@ function page_register(?array $user, string $method): void
         echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Reason for registration</span><textarea name="registration_reason" required rows="4">' . View::e($registrationReason) . '</textarea></label>';
     }
     echo '<label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="accept_terms" value="1" required' . ($acceptedTerms ? ' checked' : '') . '> <span>I accept <a href="' . View::url('/terms') . '" target="_blank" rel="noopener" style="text-decoration:underline;">Terms of Service</a></span></label>';
+    if ($registrationCaptchaEnabled && $turnstileSiteKey !== '') {
+        echo '<div class="cf-turnstile" data-sitekey="' . View::e($turnstileSiteKey) . '" data-theme="auto" data-action="register"></div>';
+    }
     echo '<div style="display: flex; align-items: center; gap: 16px;">';
     echo '<button type="submit">Register</button>';
     echo '<a href="' . View::url('/login') . '" style="font-size: 13px; color: var(--text-muted);">Back to login</a>';
@@ -1141,12 +1154,26 @@ function page_admin(?array $user, string $method): void
             $registrationRequiresApproval = isset($_POST['registration_requires_approval']) ? '1' : '0';
             $requireLogin = isset($_POST['require_login_posts']) ? '1' : '0';
             $enableAdultWarning = isset($_POST['enable_adult_warning']) ? '1' : '0';
+            $enableRegistrationCaptcha = isset($_POST['enable_registration_captcha']) ? '1' : '0';
+            $turnstileSiteKey = trim($_POST['turnstile_site_key'] ?? '');
+            $turnstileSecretKey = trim($_POST['turnstile_secret_key'] ?? '');
+            $savedTurnstileSecretKey = $turnstileSecretKey !== ''
+                ? $turnstileSecretKey
+                : View::siteSetting('turnstile_secret_key', '');
             View::setSiteSetting('disable_registrations', $disableReg);
             View::setSiteSetting('require_registration_reason', $requireRegistrationReason);
             View::setSiteSetting('registration_requires_approval', $registrationRequiresApproval);
             View::setSiteSetting('require_login_posts', $requireLogin);
             View::setSiteSetting('enable_adult_warning', $enableAdultWarning);
-            View::setFlash('Registrations & Content settings saved.', 'ok');
+            View::setSiteSetting('turnstile_site_key', $turnstileSiteKey);
+            if ($turnstileSecretKey !== '') View::setSiteSetting('turnstile_secret_key', $turnstileSecretKey);
+            if ($enableRegistrationCaptcha === '1' && ($turnstileSiteKey === '' || $savedTurnstileSecretKey === '')) {
+                View::setSiteSetting('enable_registration_captcha', '0');
+                View::setFlash('Registration CAPTCHA was not enabled. Enter both Turnstile keys.', 'error');
+            } else {
+                View::setSiteSetting('enable_registration_captcha', $enableRegistrationCaptcha);
+                View::setFlash('Registrations & Content settings saved.', 'ok');
+            }
         } elseif ($action === 'approve_registration_request') {
             $requestId = (int)($_POST['request_id'] ?? 0);
             $approved = Auth::approveRegistrationRequest($requestId);
@@ -1262,6 +1289,9 @@ function page_admin(?array $user, string $method): void
     $curRegistrationRequiresApproval = View::siteSetting('registration_requires_approval', '0');
     $curRequireLogin = View::siteSetting('require_login_posts', '0');
     $curEnableAdultWarning = View::siteSetting('enable_adult_warning', '0');
+    $curEnableRegistrationCaptcha = View::siteSetting('enable_registration_captcha', '0');
+    $curTurnstileSiteKey = View::siteSetting('turnstile_site_key', '');
+    $hasTurnstileSecretKey = View::siteSetting('turnstile_secret_key', '') !== '';
     echo '<h2>Registrations & Content</h2>';
     echo '<form method="post" style="max-width:500px; display:flex; flex-direction:column; gap:15px; margin-bottom: 20px;">';
     View::csrfField();
@@ -1281,6 +1311,14 @@ function page_admin(?array $user, string $method): void
     echo '<label style="display:flex; align-items:center; gap:5px;">';
     echo '<input type="checkbox" name="enable_adult_warning" value="1"' . ($curEnableAdultWarning === '1' ? ' checked' : '') . '> ';
     echo '<span>Enable 18+ warning</span></label>';
+    echo '<label style="display:flex; align-items:center; gap:5px;">';
+    echo '<input type="checkbox" name="enable_registration_captcha" value="1" aria-controls="turnstile-fields" onchange="document.getElementById(\'turnstile-fields\').style.display = this.checked ? \'flex\' : \'none\';"' . ($curEnableRegistrationCaptcha === '1' ? ' checked' : '') . '> ';
+    echo '<span>Enable registration captcha</span></label>';
+    echo '<div id="turnstile-fields" style="display:' . ($curEnableRegistrationCaptcha === '1' ? 'flex' : 'none') . '; flex-direction:column; gap:15px; border:1px solid var(--border-color); padding:15px;">';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Cloudflare Turnstile Site Key</span><input name="turnstile_site_key" value="' . View::e($curTurnstileSiteKey) . '" autocomplete="off"></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Cloudflare Turnstile Secret Key</span><input type="password" name="turnstile_secret_key" value="" autocomplete="new-password" placeholder="' . ($hasTurnstileSecretKey ? 'Configured — leave blank to keep it' : 'Enter secret key') . '"></label>';
+    echo '<small style="color:var(--text-muted)">Create a Turnstile widget in Cloudflare and enter its site key and secret key here.</small>';
+    echo '</div>';
     echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
 
