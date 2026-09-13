@@ -39,6 +39,57 @@ class S3Client
         return "{$this->endpoint}/{$key}";
     }
 
+    /** Create a time-limited, browser-usable GET URL without exposing the secret key. */
+    public function getPresignedUrl(string $key, int $expires = 3600): string
+    {
+        $expires = max(1, min($expires, 604800));
+        $url = $this->getUrl($key);
+        $parsed = parse_url($url);
+        if (!is_array($parsed) || empty($parsed['host'])) {
+            throw new RuntimeException('Could not build S3 media URL.');
+        }
+
+        $scheme = $parsed['scheme'] ?? 'https';
+        $host = $parsed['host'] . (isset($parsed['port']) ? ':' . $parsed['port'] : '');
+        $path = $parsed['path'] ?? '/';
+        $time = time();
+        $amzDate = gmdate('Ymd\THis\Z', $time);
+        $dateStamp = gmdate('Ymd', $time);
+        $credentialScope = "{$dateStamp}/{$this->region}/s3/aws4_request";
+
+        $query = [
+            'X-Amz-Algorithm' => 'AWS4-HMAC-SHA256',
+            'X-Amz-Credential' => $this->accessKey . '/' . $credentialScope,
+            'X-Amz-Date' => $amzDate,
+            'X-Amz-Expires' => (string)$expires,
+            'X-Amz-SignedHeaders' => 'host',
+        ];
+        ksort($query, SORT_STRING);
+        $canonicalQuery = http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+        $canonicalRequest = implode("\n", [
+            'GET',
+            $path,
+            $canonicalQuery,
+            "host:{$host}\n",
+            'host',
+            'UNSIGNED-PAYLOAD',
+        ]);
+        $stringToSign = implode("\n", [
+            'AWS4-HMAC-SHA256',
+            $amzDate,
+            $credentialScope,
+            hash('sha256', $canonicalRequest),
+        ]);
+
+        $kDate = hash_hmac('sha256', $dateStamp, 'AWS4' . $this->secretKey, true);
+        $kRegion = hash_hmac('sha256', $this->region, $kDate, true);
+        $kService = hash_hmac('sha256', 's3', $kRegion, true);
+        $kSigning = hash_hmac('sha256', 'aws4_request', $kService, true);
+        $query['X-Amz-Signature'] = hash_hmac('sha256', $stringToSign, $kSigning);
+
+        return "{$scheme}://{$host}{$path}?" . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    }
+
     /**
      * Helper to make HTTP request using stream context (pure PHP fallback for cURL).
      */
@@ -176,7 +227,7 @@ class S3Client
     /**
      * Stream object directly to client output.
      */
-    public function streamObject(string $key): void
+    public function streamObject(string $key, bool $rateLimited = false): void
     {
         $key = ltrim($key, '/');
         $url = $this->getUrl($key);
@@ -209,7 +260,29 @@ class S3Client
                     header($header, true);
                 }
             }
-            fpassthru($fp);
+            if ($rateLimited) {
+                $burstRemaining = VIDEO_RATE_LIMIT_AFTER;
+                $limitedBytes = 0;
+                $limitStartedAt = null;
+                while (!feof($fp) && !connection_aborted()) {
+                    $chunk = fread($fp, 65536);
+                    if ($chunk === false || $chunk === '') break;
+                    $chunkLength = strlen($chunk);
+                    echo $chunk;
+
+                    $burstBytes = min($burstRemaining, $chunkLength);
+                    $burstRemaining -= $burstBytes;
+                    $limitedInChunk = $chunkLength - $burstBytes;
+                    if ($limitedInChunk > 0) {
+                        $limitStartedAt ??= microtime(true);
+                        $limitedBytes += $limitedInChunk;
+                        $delay = ($limitedBytes / VIDEO_RATE_LIMIT) - (microtime(true) - $limitStartedAt);
+                        if ($delay > 0) usleep((int)($delay * 1000000));
+                    }
+                }
+            } else {
+                fpassthru($fp);
+            }
             fclose($fp);
         }
     }

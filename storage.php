@@ -155,6 +155,7 @@ class Storage
      */
     public static function serveFile(string $type, string $filename): void
     {
+        $usesApiKey = (string)($_SERVER['HTTP_X_API_KEY'] ?? '') !== '';
         if (View::siteSetting('require_login_posts', '0') === '1' && !Auth::isLoggedIn()) {
             $apiKey = (string)($_SERVER['HTTP_X_API_KEY'] ?? '');
             $apiUser = $apiKey !== '' ? Auth::fromApiKey($apiKey) : null;
@@ -170,13 +171,22 @@ class Storage
 
         $driver = self::getDriver();
         $filename = basename($filename);
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        $isVideo = $type === 'upload' && in_array($ext, ['mp4', 'webm'], true);
 
         if ($driver === 's3') {
             $s3 = self::getS3Client();
             if ($s3) {
                 $key = ($type === 'thumb' ? 'thumbs/' : 'uploads/') . $filename;
-                
-                $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+                // Let object storage serve large videos and Range requests. The
+                // application still authenticates first, then issues a short-lived URL.
+                if ($isVideo && !$usesApiKey) {
+                    header('Cache-Control: private, no-store');
+                    header('Location: ' . $s3->getPresignedUrl($key, S3_VIDEO_URL_TTL), true, 307);
+                    return;
+                }
+
                 $mimeTypes = [
                     'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
                     'gif' => 'image/gif', 'webp' => 'image/webp', 'mp4' => 'video/mp4', 'webm' => 'video/webm'
@@ -185,7 +195,7 @@ class Storage
                 
                 header('Content-Type: ' . $mime);
                 header('Cache-Control: public, max-age=31536000, immutable');
-                $s3->streamObject($key);
+                $s3->streamObject($key, $isVideo);
                 exit;
             }
         }

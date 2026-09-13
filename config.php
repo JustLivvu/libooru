@@ -30,6 +30,12 @@ define('MAX_FILE_SIZE', 100 * 1024 * 1024); // 100 MB
 define('MAX_MEDIA_PIXELS', 20_000_000);
 define('MEDIA_PROCESS_TIMEOUT', 30);
 
+// Video delivery: allow a small startup/seek burst, then cap one PHP
+// response at 2.5 MiB/s (about 21 Mbps). Four viewers stay below a 100 Mbps uplink.
+define('VIDEO_RATE_LIMIT_AFTER', 2 * 1024 * 1024);
+define('VIDEO_RATE_LIMIT', 2560 * 1024);
+define('S3_VIDEO_URL_TTL', 3600);
+
 // Comment abuse protection.
 define('MAX_COMMENT_LENGTH', 4_000); // bytes
 define('COMMENT_RATE_LIMIT', 10);
