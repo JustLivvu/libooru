@@ -214,6 +214,9 @@ class Post
             throw new RuntimeException('File type not allowed: ' . htmlspecialchars($mime));
         }
         $ext = ALLOWED_TYPES[$mime];
+        if ($mime === 'video/x-m4v') {
+            $mime = 'video/mp4';
+        }
 
         $md5 = md5_file($file['tmp_name']);
         if (!$md5) throw new RuntimeException('Failed to hash file.');

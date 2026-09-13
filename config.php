@@ -22,6 +22,7 @@ const ALLOWED_TYPES = [
     'image/gif'  => 'gif',
     'image/webp' => 'webp',
     'video/mp4'  => 'mp4',
+    'video/x-m4v' => 'mp4',
     'video/webm' => 'webm',
 ];
 
