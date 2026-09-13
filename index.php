@@ -1140,10 +1140,12 @@ function page_admin(?array $user, string $method): void
             $requireRegistrationReason = isset($_POST['require_registration_reason']) ? '1' : '0';
             $registrationRequiresApproval = isset($_POST['registration_requires_approval']) ? '1' : '0';
             $requireLogin = isset($_POST['require_login_posts']) ? '1' : '0';
+            $enableAdultWarning = isset($_POST['enable_adult_warning']) ? '1' : '0';
             View::setSiteSetting('disable_registrations', $disableReg);
             View::setSiteSetting('require_registration_reason', $requireRegistrationReason);
             View::setSiteSetting('registration_requires_approval', $registrationRequiresApproval);
             View::setSiteSetting('require_login_posts', $requireLogin);
+            View::setSiteSetting('enable_adult_warning', $enableAdultWarning);
             View::setFlash('Registrations & Content settings saved.', 'ok');
         } elseif ($action === 'approve_registration_request') {
             $requestId = (int)($_POST['request_id'] ?? 0);
@@ -1259,6 +1261,7 @@ function page_admin(?array $user, string $method): void
     $curRequireRegistrationReason = View::siteSetting('require_registration_reason', '0');
     $curRegistrationRequiresApproval = View::siteSetting('registration_requires_approval', '0');
     $curRequireLogin = View::siteSetting('require_login_posts', '0');
+    $curEnableAdultWarning = View::siteSetting('enable_adult_warning', '0');
     echo '<h2>Registrations & Content</h2>';
     echo '<form method="post" style="max-width:500px; display:flex; flex-direction:column; gap:15px; margin-bottom: 20px;">';
     View::csrfField();
@@ -1275,6 +1278,9 @@ function page_admin(?array $user, string $method): void
     echo '<label style="display:flex; align-items:center; gap:5px;">';
     echo '<input type="checkbox" name="require_login_posts" value="1"' . ($curRequireLogin === '1' ? ' checked' : '') . '> ';
     echo '<span>Forbid viewing posts for logged out users</span></label>';
+    echo '<label style="display:flex; align-items:center; gap:5px;">';
+    echo '<input type="checkbox" name="enable_adult_warning" value="1"' . ($curEnableAdultWarning === '1' ? ' checked' : '') . '> ';
+    echo '<span>Enable 18+ warning</span></label>';
     echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
 

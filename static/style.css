@@ -84,6 +84,59 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+body.adult-warning-open {
+  overflow: hidden;
+}
+
+.adult-warning[hidden] {
+  display: none;
+}
+
+.adult-warning {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.88);
+}
+
+.adult-warning-card {
+  width: min(100%, 460px);
+  padding: 32px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+}
+
+.adult-warning-card h1 {
+  margin: 0 0 12px;
+  font-size: 26px;
+}
+
+.adult-warning-card p {
+  margin: 0 0 24px;
+  color: var(--text-muted);
+}
+
+.adult-warning-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.adult-warning-actions button {
+  min-width: 130px;
+}
+
+.adult-warning-actions button.secondary {
+  color: var(--text-muted);
+  background: transparent;
+}
+
 a {
   color: var(--text-main);
   text-decoration: none;

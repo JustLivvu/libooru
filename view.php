@@ -52,6 +52,7 @@ class View
         $siteName = self::siteSetting('site_name', SITE_NAME);
         $siteLogo = self::siteSetting('site_logo');
         $siteBanner = self::siteSetting('site_banner');
+        $adultWarningEnabled = self::siteSetting('enable_adult_warning', '0') === '1';
         $e = fn($v) => self::e($v);
 
         // Logo / banner brand markup
@@ -70,10 +71,56 @@ class View
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{$e($title)} - {$e($siteName)}</title>
-<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v=8">
+<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v=10">
 <script src="{$e(SITE_BASE)}/static/autocomplete.js" defer></script>
 </head>
 <body>
+HTML;
+        if ($adultWarningEnabled) {
+            echo <<<'HTML'
+<div id="adult-warning" class="adult-warning" role="dialog" aria-modal="true" aria-labelledby="adult-warning-title" hidden>
+  <div class="adult-warning-card">
+    <h1 id="adult-warning-title">Are you 18 or older?</h1>
+    <p>This website contains adult content. You must be at least 18 years old to continue.</p>
+    <div class="adult-warning-actions">
+      <button id="adult-warning-yes" type="button">Yes, I am 18+</button>
+      <button id="adult-warning-no" type="button" class="secondary">No</button>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+  const warning = document.getElementById('adult-warning');
+  const hasAdultCookie = document.cookie.split('; ').includes('adult=true');
+  let accepted = hasAdultCookie;
+
+  try {
+    accepted = localStorage.getItem('adult') === 'true' || hasAdultCookie;
+  } catch (_) {}
+
+  if (!accepted) {
+    warning.hidden = false;
+    document.body.classList.add('adult-warning-open');
+  }
+
+  document.getElementById('adult-warning-yes').addEventListener('click', () => {
+    try {
+      localStorage.setItem('adult', 'true');
+    } catch (_) {
+      document.cookie = 'adult=true; Max-Age=31536000; Path=/; SameSite=Lax';
+    }
+    warning.hidden = true;
+    document.body.classList.remove('adult-warning-open');
+  });
+
+  document.getElementById('adult-warning-no').addEventListener('click', () => {
+    window.location.replace('https://www.google.com/');
+  });
+})();
+</script>
+HTML;
+        }
+        echo <<<HTML
 <header>
   <nav>
     <a href="{$e(SITE_BASE)}/">{$brand}</a>
