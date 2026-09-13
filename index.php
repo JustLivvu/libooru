@@ -315,7 +315,7 @@ function page_home(?array $user): void
     if ($user) {
         echo '    <a style="margin-left: auto;" href="' . View::url('/user/' . rawurlencode($user['name'])) . '">My Account</a>';
         echo '    <a href="' . View::url('/settings') . '">Settings</a>';
-        if ($user['role'] === 'admin') {
+        if (Auth::can('access_admin_panel', $user)) {
             echo '    <a href="' . View::url('/admin') . '">Panel</a>';
         }
         echo '    <a href="' . View::url('/logout') . '">Logout</a>';
@@ -432,7 +432,8 @@ function page_post(?array $user, int $id): void
 
     $fileUrl  = Image::fileUrl($post['filename']);
     $isOwner  = $user && (int)$user['id'] === (int)$post['user_id'];
-    $isAdmin  = $user && $user['role'] === 'admin';
+    $canModeratePosts = $user && Auth::can('moderate_posts', $user);
+    $canModerateComments = $user && Auth::can('moderate_comments', $user);
 
     echo '<article class="post-view">';
     echo '<h1>Post #' . View::e($id) . '</h1>';
@@ -489,7 +490,7 @@ function page_post(?array $user, int $id): void
         }
         echo '</form> ';
     }
-    if ($isOwner || $isAdmin) {
+    if ($isOwner || $canModeratePosts) {
         echo '<a href="' . View::url('/post/' . $id . '/edit') . '"><button type="button">Edit</button></a> ';
         echo '<form method="post" action="' . View::url('/post/' . $id . '/delete') . '" style="display:inline" onsubmit="return confirm(\'Delete post #' . $id . '?\');">';
         View::csrfField();
@@ -508,7 +509,7 @@ function page_post(?array $user, int $id): void
         echo '<div class="comment">';
         echo '<span class="comment-author">' . View::e($author) . '</span> ';
         echo '<span class="comment-date">' . date('Y-m-d H:i', (int)$c['created_at']) . '</span>';
-        if ($isAdmin) {
+        if ($canModerateComments) {
             echo ' <form method="post" action="' . View::url('/post/' . $id) . '" style="display:inline">';
             View::csrfField();
             echo '<input type="hidden" name="action" value="delete_comment">';
@@ -562,7 +563,7 @@ function post_handle(?array $user, int $id): void
     } elseif ($action === 'vote' && $user) {
         $value = (int)($_POST['value'] ?? 0);
         Post::vote($id, (int)$user['id'], $value);
-    } elseif ($action === 'delete_comment' && $user && $user['role'] === 'admin') {
+    } elseif ($action === 'delete_comment' && $user && Auth::can('moderate_comments', $user)) {
         $cid = (int)($_POST['comment_id'] ?? 0);
         if ($cid) Post::deleteComment($cid);
         View::setFlash('Comment deleted.', 'ok');
@@ -582,7 +583,7 @@ function page_post_edit(?array $user, int $id, string $method): void
         View::footer();
         return;
     }
-    if ((int)$user['id'] !== (int)$post['user_id'] && $user['role'] !== 'admin') {
+    if ((int)$user['id'] !== (int)$post['user_id'] && !Auth::can('moderate_posts', $user)) {
         Router::redirect('/post/' . $id);
     }
 
@@ -626,7 +627,7 @@ function action_post_delete(?array $user, int $id): void
     View::verifyCsrf();
     $post = Post::getById($id);
     if (!$post) Router::redirect('/posts');
-    if ((int)$user['id'] !== (int)$post['user_id'] && $user['role'] !== 'admin') {
+    if ((int)$user['id'] !== (int)$post['user_id'] && !Auth::can('moderate_posts', $user)) {
         Router::redirect('/post/' . $id);
     }
     Post::delete($id);
@@ -954,7 +955,7 @@ function page_favorites_lucky(?array $user): void
 
 function page_scraper(?array $user, string $method): void
 {
-    Auth::requireAdmin();
+    Auth::requirePermission('manage_scraper');
 
     if ($method === 'POST') {
         View::verifyCsrf();
@@ -1118,11 +1119,29 @@ function page_scraper(?array $user, string $method): void
 
 function page_admin(?array $user, string $method): void
 {
-    Auth::requireAdmin();
+    Auth::requirePermission('access_admin_panel');
+    $permissionCatalog = Auth::permissionCatalog();
 
     if ($method === 'POST') {
         View::verifyCsrf();
         $action = $_POST['action'] ?? '';
+        $permissionByAction = [
+            'delete_user' => 'manage_users',
+            'regen_api' => 'manage_users',
+            'set_role' => 'manage_roles',
+            'create_role' => 'manage_roles',
+            'update_role' => 'manage_roles',
+            'delete_role' => 'manage_roles',
+            'site_settings' => 'manage_site_settings',
+            'storage_settings' => 'manage_storage_settings',
+            'registrations_settings' => 'manage_registration_settings',
+            'approve_registration_request' => 'manage_registration_requests',
+            'decline_registration_request' => 'manage_registration_requests',
+        ];
+        if (isset($permissionByAction[$action]) && !Auth::can($permissionByAction[$action], $user)) {
+            View::setFlash('You do not have permission to perform this action.', 'error');
+            Router::redirect('/admin');
+        }
 
         if ($action === 'delete_user') {
             $uid = (int)($_POST['user_id'] ?? 0);
@@ -1131,10 +1150,78 @@ function page_admin(?array $user, string $method): void
                 View::setFlash('User deleted.', 'ok');
             }
         } elseif ($action === 'set_role') {
-            $uid  = (int)($_POST['user_id'] ?? 0);
-            $role = in_array($_POST['role'] ?? '', ['admin', 'user'], true) ? $_POST['role'] : 'user';
-            DB::exec('UPDATE users SET role = ? WHERE id = ?', [$role, $uid]);
-            View::setFlash('Role updated.', 'ok');
+            $uid = (int)($_POST['user_id'] ?? 0);
+            $role = trim((string)($_POST['role'] ?? ''));
+            $roleExists = (bool)DB::scalar('SELECT id FROM roles WHERE slug = ?', [$role]);
+            if ($uid === (int)$user['id'] && $role !== $user['role']) {
+                View::setFlash('You cannot change your own role.', 'error');
+            } elseif (!$uid || !$roleExists) {
+                View::setFlash('Invalid user or role.', 'error');
+            } else {
+                DB::exec('UPDATE users SET role = ? WHERE id = ?', [$role, $uid]);
+                View::setFlash('Role updated.', 'ok');
+            }
+        } elseif ($action === 'create_role') {
+            $name = trim((string)($_POST['role_name'] ?? ''));
+            $permissions = array_values(array_intersect(array_keys($permissionCatalog), array_map('strval', (array)($_POST['permissions'] ?? []))));
+            $slug = strtolower(trim((string)preg_replace('/[^a-z0-9]+/i', '-', $name), '-'));
+            if (strlen($name) < 2 || strlen($name) > 40) {
+                View::setFlash('Role name must contain between 2 and 40 characters.', 'error');
+            } else {
+                if ($slug === '') $slug = 'role-' . bin2hex(random_bytes(4));
+                try {
+                    DB::exec(
+                        'INSERT INTO roles (name, slug, permissions) VALUES (?, ?, ?)',
+                        [$name, $slug, json_encode($permissions, JSON_THROW_ON_ERROR)]
+                    );
+                    View::setFlash('Role created.', 'ok');
+                } catch (PDOException $e) {
+                    View::setFlash('A role with this name already exists.', 'error');
+                }
+            }
+        } elseif ($action === 'update_role') {
+            $roleId = (int)($_POST['role_id'] ?? 0);
+            $name = trim((string)($_POST['role_name'] ?? ''));
+            $permissions = array_values(array_intersect(array_keys($permissionCatalog), array_map('strval', (array)($_POST['permissions'] ?? []))));
+            $role = DB::row('SELECT * FROM roles WHERE id = ?', [$roleId]);
+            if (!$role || (int)$role['is_system'] === 1) {
+                View::setFlash('System roles cannot be changed.', 'error');
+            } elseif ($role['slug'] === $user['role']) {
+                View::setFlash('You cannot change the role currently assigned to your account.', 'error');
+            } elseif (strlen($name) < 2 || strlen($name) > 40) {
+                View::setFlash('Role name must contain between 2 and 40 characters.', 'error');
+            } else {
+                try {
+                    DB::exec('UPDATE roles SET name = ?, permissions = ? WHERE id = ?', [
+                        $name,
+                        json_encode($permissions, JSON_THROW_ON_ERROR),
+                        $roleId,
+                    ]);
+                    View::setFlash('Role updated.', 'ok');
+                } catch (PDOException $e) {
+                    View::setFlash('A role with this name already exists.', 'error');
+                }
+            }
+        } elseif ($action === 'delete_role') {
+            $roleId = (int)($_POST['role_id'] ?? 0);
+            $role = DB::row('SELECT * FROM roles WHERE id = ?', [$roleId]);
+            if (!$role || (int)$role['is_system'] === 1) {
+                View::setFlash('System roles cannot be deleted.', 'error');
+            } elseif ($role['slug'] === $user['role']) {
+                View::setFlash('You cannot delete the role currently assigned to your account.', 'error');
+            } else {
+                $pdo = DB::get();
+                $pdo->beginTransaction();
+                try {
+                    DB::exec("UPDATE users SET role = 'user' WHERE role = ?", [$role['slug']]);
+                    DB::exec('DELETE FROM roles WHERE id = ?', [$roleId]);
+                    $pdo->commit();
+                    View::setFlash('Role deleted. Its users were moved to the User role.', 'ok');
+                } catch (Throwable $e) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    View::setFlash('Could not delete the role.', 'error');
+                }
+            }
         } elseif ($action === 'regen_api') {
             $uid = (int)($_POST['user_id'] ?? 0);
             $key = bin2hex(random_bytes(16));
@@ -1220,12 +1307,20 @@ function page_admin(?array $user, string $method): void
             'delete_user' => 'users',
             'set_role' => 'users',
             'regen_api' => 'users',
+            'create_role' => 'roles',
+            'update_role' => 'roles',
+            'delete_role' => 'roles',
         ];
         $redirectParams = isset($sectionByAction[$action]) ? ['open' => $sectionByAction[$action]] : [];
         Router::redirect('/admin', $redirectParams);
     }
 
     $openSection = $_GET['open'] ?? '';
+    $roles = DB::rows(
+        'SELECT r.*, (SELECT COUNT(*) FROM users u WHERE u.role = r.slug) AS user_count
+         FROM roles r ORDER BY r.is_system DESC, r.name COLLATE NOCASE'
+    );
+    $roleNames = array_column($roles, 'name', 'slug');
     $users        = DB::rows('SELECT id, name, email, registration_reason, role, api_key, created_at FROM users ORDER BY id DESC');
     $registrationRequests = DB::rows('SELECT id, name, email, registration_reason, created_at FROM registration_requests ORDER BY created_at ASC');
     $postCount    = (int)DB::scalar('SELECT COUNT(*) FROM posts');
@@ -1265,6 +1360,7 @@ function page_admin(?array $user, string $method): void
     echo '</div></details>';
 
     // Site settings
+    if (Auth::can('manage_site_settings', $user)) {
     echo '<details class="admin-section"' . ($openSection === 'site-settings' ? ' open' : '') . '>';
     echo '<summary>Site Settings</summary>';
     echo '<div class="admin-section-content">';
@@ -1284,8 +1380,10 @@ function page_admin(?array $user, string $method): void
     echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
     echo '</div></details>';
+    }
 
     // Storage settings
+    if (Auth::can('manage_storage_settings', $user)) {
     $isLocal = $curStorageDriver === 'local';
     $isS3    = $curStorageDriver === 's3';
     echo '<details class="admin-section"' . ($openSection === 'media-storage' ? ' open' : '') . '>';
@@ -1331,8 +1429,10 @@ function page_admin(?array $user, string $method): void
     echo '<button style="align-self:flex-start;">Save Storage Settings</button>';
     echo '</form>';
     echo '</div></details>';
+    }
 
     // Registrations & Content settings
+    if (Auth::can('manage_registration_settings', $user)) {
     $curDisableReg = View::siteSetting('disable_registrations', '0');
     $curRequireRegistrationReason = View::siteSetting('require_registration_reason', '0');
     $curRegistrationRequiresApproval = View::siteSetting('registration_requires_approval', '0');
@@ -1373,8 +1473,10 @@ function page_admin(?array $user, string $method): void
     echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
     echo '</div></details>';
+    }
 
     // Registration requests
+    if (Auth::can('manage_registration_requests', $user)) {
     echo '<details class="admin-section"' . ($openSection === 'registration-requests' ? ' open' : '') . '>';
     echo '<summary>Registration requests <span class="admin-section-count">' . count($registrationRequests) . '</span></summary>';
     echo '<div class="admin-section-content">';
@@ -1399,13 +1501,73 @@ function page_admin(?array $user, string $method): void
         echo '</tbody></table></div>';
     }
     echo '</div></details>';
+    }
+
+    // Roles
+    if (Auth::can('manage_roles', $user)) {
+        echo '<details class="admin-section"' . ($openSection === 'roles' ? ' open' : '') . '>';
+        echo '<summary>Roles <span class="admin-section-count">' . count($roles) . '</span></summary>';
+        echo '<div class="admin-section-content">';
+        echo '<h3>Create role</h3>';
+        echo '<form method="post" class="admin-role-editor">';
+        View::csrfField();
+        echo '<input type="hidden" name="action" value="create_role">';
+        echo '<label><span>Role name</span><input name="role_name" maxlength="40" required placeholder="e.g. Moderator"></label>';
+        echo '<fieldset><legend>Permissions</legend><div class="admin-permissions">';
+        foreach ($permissionCatalog as $permission => $label) {
+            echo '<label><input type="checkbox" name="permissions[]" value="' . View::e($permission) . '"> <span>' . View::e($label) . '</span></label>';
+        }
+        echo '</div></fieldset>';
+        echo '<button style="align-self:flex-start">Create Role</button>';
+        echo '</form>';
+
+        echo '<h3 style="margin-top:28px">Existing roles</h3>';
+        foreach ($roles as $role) {
+            $rolePermissions = json_decode((string)$role['permissions'], true);
+            if (!is_array($rolePermissions)) $rolePermissions = [];
+            echo '<div class="admin-role-card">';
+            echo '<div class="admin-role-heading"><strong>' . View::e($role['name']) . '</strong> ';
+            echo '<code>' . View::e($role['slug']) . '</code> ';
+            echo '<span class="admin-section-count">' . (int)$role['user_count'] . ' users</span></div>';
+            if ((int)$role['is_system'] === 1) {
+                echo '<p class="admin-role-note">' . ($role['slug'] === 'admin' ? 'System role with all permissions.' : 'Default system role for regular users.') . '</p>';
+            } elseif ($role['slug'] === $user['role']) {
+                echo '<p class="admin-role-note">This role is assigned to your account, so you cannot edit or delete it yourself.</p>';
+            } else {
+                echo '<form method="post" class="admin-role-editor">';
+                View::csrfField();
+                echo '<input type="hidden" name="action" value="update_role">';
+                echo '<input type="hidden" name="role_id" value="' . (int)$role['id'] . '">';
+                echo '<label><span>Role name</span><input name="role_name" maxlength="40" required value="' . View::e($role['name']) . '"></label>';
+                echo '<fieldset><legend>Permissions</legend><div class="admin-permissions">';
+                foreach ($permissionCatalog as $permission => $label) {
+                    $checked = in_array($permission, $rolePermissions, true) ? ' checked' : '';
+                    echo '<label><input type="checkbox" name="permissions[]" value="' . View::e($permission) . '"' . $checked . '> <span>' . View::e($label) . '</span></label>';
+                }
+                echo '</div></fieldset>';
+                echo '<button style="align-self:flex-start">Save Role</button>';
+                echo '</form>';
+                echo '<form method="post" onsubmit="return confirm(\'Delete this role? Assigned users will become regular users.\')" style="margin-top:10px">';
+                View::csrfField();
+                echo '<input type="hidden" name="action" value="delete_role">';
+                echo '<input type="hidden" name="role_id" value="' . (int)$role['id'] . '">';
+                echo '<button>Delete Role</button>';
+                echo '</form>';
+            }
+            echo '</div>';
+        }
+        echo '</div></details>';
+    }
 
     // Users table
+    if (Auth::can('manage_users', $user) || Auth::can('manage_roles', $user)) {
     echo '<details class="admin-section"' . ($openSection === 'users' ? ' open' : '') . '>';
     echo '<summary>Users <span class="admin-section-count">' . count($users) . '</span></summary>';
     echo '<div class="admin-section-content">';
     echo '<div style="overflow-x:auto"><table>';
-    echo '<thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Reason</th><th>Role</th><th>API Key</th><th>Actions</th></tr></thead>';
+    echo '<thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Reason</th><th>Role</th>';
+    if (Auth::can('manage_users', $user)) echo '<th>API Key</th>';
+    echo '<th>Actions</th></tr></thead>';
     echo '<tbody>';
     foreach ($users as $u) {
         echo '<tr>';
@@ -1413,30 +1575,34 @@ function page_admin(?array $user, string $method): void
         echo '<td><a href="' . View::url('/user/' . rawurlencode($u['name'])) . '">' . View::e($u['name']) . '</a></td>';
         echo '<td>' . View::e($u['email'] ?: '—') . '</td>';
         echo '<td>' . View::e($u['registration_reason'] ?: '—') . '</td>';
-        echo '<td>' . View::e($u['role']) . '</td>';
-        echo '<td><code style="font-size:11px">' . View::e($u['api_key']) . '</code></td>';
+        echo '<td>' . View::e($roleNames[$u['role']] ?? $u['role']) . '</td>';
+        if (Auth::can('manage_users', $user)) echo '<td><code style="font-size:11px">' . View::e($u['api_key']) . '</code></td>';
         echo '<td style="white-space:nowrap">';
         // Change role
-        echo '<form method="post" style="display:inline">';
-        View::csrfField();
-        echo '<input type="hidden" name="action" value="set_role">';
-        echo '<input type="hidden" name="user_id" value="' . View::e($u['id']) . '">';
-        echo '<select name="role">';
-        foreach (['user', 'admin'] as $r) {
-            $sel = $u['role'] === $r ? ' selected' : '';
-            echo "<option value=\"{$r}\"{$sel}>{$r}</option>";
+        if (Auth::can('manage_roles', $user) && (int)$u['id'] !== (int)$user['id']) {
+            echo '<form method="post" style="display:inline">';
+            View::csrfField();
+            echo '<input type="hidden" name="action" value="set_role">';
+            echo '<input type="hidden" name="user_id" value="' . View::e($u['id']) . '">';
+            echo '<select name="role">';
+            foreach ($roles as $availableRole) {
+                $sel = $u['role'] === $availableRole['slug'] ? ' selected' : '';
+                echo '<option value="' . View::e($availableRole['slug']) . '"' . $sel . '>' . View::e($availableRole['name']) . '</option>';
+            }
+            echo '</select> <button>Set</button>';
+            echo '</form> ';
         }
-        echo '</select> <button>Set</button>';
-        echo '</form> ';
         // Regen API key
-        echo '<form method="post" style="display:inline">';
-        View::csrfField();
-        echo '<input type="hidden" name="action" value="regen_api">';
-        echo '<input type="hidden" name="user_id" value="' . View::e($u['id']) . '">';
-        echo '<button>Regen API</button>';
-        echo '</form> ';
+        if (Auth::can('manage_users', $user)) {
+            echo '<form method="post" style="display:inline">';
+            View::csrfField();
+            echo '<input type="hidden" name="action" value="regen_api">';
+            echo '<input type="hidden" name="user_id" value="' . View::e($u['id']) . '">';
+            echo '<button>Regen API</button>';
+            echo '</form> ';
+        }
         // Delete
-        if ((int)$u['id'] !== (int)$user['id']) {
+        if (Auth::can('manage_users', $user) && (int)$u['id'] !== (int)$user['id']) {
             echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Delete user ' . View::e($u['name']) . '?\')">';
             View::csrfField();
             echo '<input type="hidden" name="action" value="delete_user">';
@@ -1449,6 +1615,7 @@ function page_admin(?array $user, string $method): void
     }
     echo '</tbody></table></div>';
     echo '</div></details>';
+    }
     View::footer();
 }
 

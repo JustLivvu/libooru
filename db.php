@@ -24,6 +24,15 @@ class DB
     private static function migrate(PDO $pdo): void
     {
         $pdo->exec("
+            CREATE TABLE IF NOT EXISTS roles (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                slug        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                permissions TEXT NOT NULL DEFAULT '[]',
+                is_system   INTEGER NOT NULL DEFAULT 0,
+                created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+
             CREATE TABLE IF NOT EXISTS users (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -123,6 +132,10 @@ class DB
             CREATE INDEX IF NOT EXISTS idx_posts_quality  ON posts(quality);
             CREATE INDEX IF NOT EXISTS idx_registration_requests_created ON registration_requests(created_at ASC);
         ");
+
+        // Built-in roles are immutable safeguards. Custom roles are managed in /admin.
+        $pdo->exec("INSERT OR IGNORE INTO roles (name, slug, permissions, is_system) VALUES ('Administrator', 'admin', '[\"*\"]', 1)");
+        $pdo->exec("INSERT OR IGNORE INTO roles (name, slug, permissions, is_system) VALUES ('User', 'user', '[]', 1)");
 
         // Add blacklist column to users if missing
         $userCols = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);

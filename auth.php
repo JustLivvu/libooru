@@ -6,6 +6,7 @@ require_once __DIR__ . '/db.php';
 class Auth
 {
     private static ?array $user = null;
+    private static array $permissionCache = [];
 
     public static function start(): void
     {
@@ -47,6 +48,47 @@ class Auth
     public static function isAdmin(): bool
     {
         return self::$user && self::$user['role'] === 'admin';
+    }
+
+    public static function permissionCatalog(): array
+    {
+        return [
+            'access_admin_panel' => 'Access the admin panel and statistics',
+            'manage_site_settings' => 'Manage site settings and branding',
+            'manage_storage_settings' => 'Manage media storage settings',
+            'manage_registration_settings' => 'Manage registration and content settings',
+            'manage_registration_requests' => 'Approve and decline registration requests',
+            'manage_users' => 'Delete users and regenerate API keys',
+            'manage_roles' => 'Create roles and assign roles to users',
+            'manage_scraper' => 'Access and manage scrapers',
+            'moderate_posts' => 'Edit and delete any user post',
+            'moderate_comments' => 'Delete comments',
+        ];
+    }
+
+    public static function can(string $permission, ?array $user = null): bool
+    {
+        $user ??= self::$user;
+        if (!$user) return false;
+
+        $role = (string)($user['role'] ?? 'user');
+        if ($role === 'admin') return true;
+
+        if (!array_key_exists($role, self::$permissionCache)) {
+            $encoded = DB::scalar('SELECT permissions FROM roles WHERE slug = ?', [$role]);
+            $decoded = is_string($encoded) ? json_decode($encoded, true) : [];
+            self::$permissionCache[$role] = is_array($decoded) ? $decoded : [];
+        }
+
+        return in_array('*', self::$permissionCache[$role], true)
+            || in_array($permission, self::$permissionCache[$role], true);
+    }
+
+    public static function requirePermission(string $permission): void
+    {
+        if (!self::can($permission)) {
+            Router::redirect('/');
+        }
     }
 
     public static function require(): void

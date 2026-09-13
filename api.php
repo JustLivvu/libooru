@@ -190,7 +190,7 @@ class Api
         $this->requireAuth();
         $post = DB::row('SELECT * FROM posts WHERE id = ?', [$id]);
         if (!$post) throw new RuntimeException('Post not found', 404);
-        if ($post['user_id'] !== $this->authUser['id'] && $this->authUser['role'] !== 'admin') {
+        if ($post['user_id'] !== $this->authUser['id'] && !Auth::can('moderate_posts', $this->authUser)) {
             throw new RuntimeException('Forbidden', 403);
         }
         $body = $this->jsonBody();
@@ -203,7 +203,7 @@ class Api
         $this->requireAuth();
         $post = DB::row('SELECT * FROM posts WHERE id = ?', [$id]);
         if (!$post) throw new RuntimeException('Post not found', 404);
-        if ($post['user_id'] !== $this->authUser['id'] && $this->authUser['role'] !== 'admin') {
+        if ($post['user_id'] !== $this->authUser['id'] && !Auth::can('moderate_posts', $this->authUser)) {
             throw new RuntimeException('Forbidden', 403);
         }
         Post::delete($id);
@@ -318,7 +318,7 @@ class Api
 
     private function deleteComment(int $id): void
     {
-        $this->requireAdmin();
+        $this->requirePermission('moderate_comments');
         Post::deleteComment($id);
         echo json_encode(['ok' => true]);
     }
@@ -365,10 +365,10 @@ class Api
         if (!$this->authUser) throw new RuntimeException('Unauthorized', 401);
     }
 
-    private function requireAdmin(): void
+    private function requirePermission(string $permission): void
     {
         $this->requireAuth();
-        if ($this->authUser['role'] !== 'admin') throw new RuntimeException('Forbidden', 403);
+        if (!Auth::can($permission, $this->authUser)) throw new RuntimeException('Forbidden', 403);
     }
 
     private function jsonBody(): array
