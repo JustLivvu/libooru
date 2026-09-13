@@ -750,6 +750,79 @@ footer {
   margin-top: 48px;
 }
 
+/* Admin panel accordion sections */
+.admin-section {
+  margin: 12px 0;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.admin-section > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  color: var(--text-main);
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.admin-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-section > summary::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.15s ease;
+}
+
+.admin-section > summary:hover,
+.admin-section > summary:focus-visible {
+  background: var(--bg-elevated);
+}
+
+.admin-section > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+
+.admin-section[open] > summary::after {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+.admin-section-content {
+  padding: 16px;
+}
+
+.admin-section-content > :first-child {
+  margin-top: 0;
+}
+
+.admin-section-content > :last-child {
+  margin-bottom: 0;
+}
+
+.admin-section-count {
+  min-width: 24px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
 /* ── Mobile Responsiveness ────────────────────────────────────────────────── */
 @media (max-width: 850px) {
   .gelbooru-home {

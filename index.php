@@ -1211,9 +1211,21 @@ function page_admin(?array $user, string $method): void
             View::setFlash(Auth::declineRegistrationRequest($requestId) ? 'Registration request declined.' : 'Registration request was not found.', 'ok');
         }
 
-        Router::redirect('/admin');
+        $sectionByAction = [
+            'site_settings' => 'site-settings',
+            'storage_settings' => 'media-storage',
+            'registrations_settings' => 'registrations-content',
+            'approve_registration_request' => 'registration-requests',
+            'decline_registration_request' => 'registration-requests',
+            'delete_user' => 'users',
+            'set_role' => 'users',
+            'regen_api' => 'users',
+        ];
+        $redirectParams = isset($sectionByAction[$action]) ? ['open' => $sectionByAction[$action]] : [];
+        Router::redirect('/admin', $redirectParams);
     }
 
+    $openSection = $_GET['open'] ?? '';
     $users        = DB::rows('SELECT id, name, email, registration_reason, role, api_key, created_at FROM users ORDER BY id DESC');
     $registrationRequests = DB::rows('SELECT id, name, email, registration_reason, created_at FROM registration_requests ORDER BY created_at ASC');
     $postCount    = (int)DB::scalar('SELECT COUNT(*) FROM posts');
@@ -1239,7 +1251,9 @@ function page_admin(?array $user, string $method): void
     echo '<h1>Panel</h1>';
 
     // Stats
-    echo '<h2>Statistics</h2>';
+    echo '<details class="admin-section"' . ($openSection === 'statistics' ? ' open' : '') . '>';
+    echo '<summary>Statistics</summary>';
+    echo '<div class="admin-section-content">';
     echo '<table>';
     echo '<tbody>';
     echo '<tr><th style="text-align:left; padding:8px;">Posts</th><td style="padding:8px;">' . $postCount . '</td></tr>';
@@ -1248,9 +1262,12 @@ function page_admin(?array $user, string $method): void
     echo '<tr><th style="text-align:left; padding:8px;">Users</th><td style="padding:8px;">' . count($users) . '</td></tr>';
     echo '</tbody>';
     echo '</table>';
+    echo '</div></details>';
 
     // Site settings
-    echo '<h2>Site Settings</h2>';
+    echo '<details class="admin-section"' . ($openSection === 'site-settings' ? ' open' : '') . '>';
+    echo '<summary>Site Settings</summary>';
+    echo '<div class="admin-section-content">';
     echo '<p style="color:var(--muted-text);font-size:12px">All site images are saved in local storage.</p>';
     echo '<form method="post" enctype="multipart/form-data" style="max-width:500px; display:flex; flex-direction:column; gap:15px;">';
     View::csrfField();
@@ -1266,11 +1283,14 @@ function page_admin(?array $user, string $method): void
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Terms of Service <small>(shown at /terms)</small></span><textarea name="terms_of_service" rows="12" style="width:100%" placeholder="Write your Terms of Service…">' . View::e($curTermsOfService) . '</textarea></label>';
     echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
+    echo '</div></details>';
 
     // Storage settings
     $isLocal = $curStorageDriver === 'local';
     $isS3    = $curStorageDriver === 's3';
-    echo '<h2>Media Storage Settings</h2>';
+    echo '<details class="admin-section"' . ($openSection === 'media-storage' ? ' open' : '') . '>';
+    echo '<summary>Media Storage Settings</summary>';
+    echo '<div class="admin-section-content">';
 
     $totalBytes = 0;
     if (file_exists(__DIR__ . '/data/uploads')) {
@@ -1310,6 +1330,7 @@ function page_admin(?array $user, string $method): void
 
     echo '<button style="align-self:flex-start;">Save Storage Settings</button>';
     echo '</form>';
+    echo '</div></details>';
 
     // Registrations & Content settings
     $curDisableReg = View::siteSetting('disable_registrations', '0');
@@ -1320,7 +1341,9 @@ function page_admin(?array $user, string $method): void
     $curEnableRegistrationCaptcha = View::siteSetting('enable_registration_captcha', '0');
     $curTurnstileSiteKey = View::siteSetting('turnstile_site_key', '');
     $hasTurnstileSecretKey = View::siteSetting('turnstile_secret_key', '') !== '';
-    echo '<h2>Registrations & Content</h2>';
+    echo '<details class="admin-section"' . ($openSection === 'registrations-content' ? ' open' : '') . '>';
+    echo '<summary>Registrations &amp; Content</summary>';
+    echo '<div class="admin-section-content">';
     echo '<form method="post" style="max-width:500px; display:flex; flex-direction:column; gap:15px; margin-bottom: 20px;">';
     View::csrfField();
     echo '<input type="hidden" name="action" value="registrations_settings">';
@@ -1349,9 +1372,12 @@ function page_admin(?array $user, string $method): void
     echo '</div>';
     echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
+    echo '</div></details>';
 
     // Registration requests
-    echo '<h2>Registration requests</h2>';
+    echo '<details class="admin-section"' . ($openSection === 'registration-requests' ? ' open' : '') . '>';
+    echo '<summary>Registration requests <span class="admin-section-count">' . count($registrationRequests) . '</span></summary>';
+    echo '<div class="admin-section-content">';
     if (!$registrationRequests) {
         echo '<p>No pending registration requests.</p>';
     } else {
@@ -1372,9 +1398,12 @@ function page_admin(?array $user, string $method): void
         }
         echo '</tbody></table></div>';
     }
+    echo '</div></details>';
 
     // Users table
-    echo '<h2>Users</h2>';
+    echo '<details class="admin-section"' . ($openSection === 'users' ? ' open' : '') . '>';
+    echo '<summary>Users <span class="admin-section-count">' . count($users) . '</span></summary>';
+    echo '<div class="admin-section-content">';
     echo '<div style="overflow-x:auto"><table>';
     echo '<thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Reason</th><th>Role</th><th>API Key</th><th>Actions</th></tr></thead>';
     echo '<tbody>';
@@ -1419,6 +1448,7 @@ function page_admin(?array $user, string $method): void
         echo '</tr>';
     }
     echo '</tbody></table></div>';
+    echo '</div></details>';
     View::footer();
 }
 
