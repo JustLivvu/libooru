@@ -35,6 +35,7 @@ define('MEDIA_PROCESS_TIMEOUT', 30);
 define('VIDEO_RATE_LIMIT_AFTER', 2 * 1024 * 1024);
 define('VIDEO_RATE_LIMIT', 2560 * 1024);
 define('S3_VIDEO_URL_TTL', 3600);
+define('S3_THUMB_URL_TTL', 3600);
 
 // Comment abuse protection.
 define('MAX_COMMENT_LENGTH', 4_000); // bytes

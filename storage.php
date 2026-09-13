@@ -169,6 +169,12 @@ class Storage
             Auth::setUser($apiUser);
         }
 
+        // Media requests never modify the session. Release its file lock before
+        // talking to storage so requests from one browser can run concurrently.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         $driver = self::getDriver();
         $filename = basename($filename);
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
@@ -179,11 +185,16 @@ class Storage
             if ($s3) {
                 $key = ($type === 'thumb' ? 'thumbs/' : 'uploads/') . $filename;
 
-                // Let object storage serve large videos and Range requests. The
-                // application still authenticates first, then issues a short-lived URL.
-                if ($isVideo && !$usesApiKey) {
-                    header('Cache-Control: private, no-store');
-                    header('Location: ' . $s3->getPresignedUrl($key, S3_VIDEO_URL_TTL), true, 307);
+                // Authenticate in the application, but let object storage serve
+                // browser thumbnails and large videos. This keeps PHP-FPM workers
+                // free and lets the browser fetch thumbnails concurrently.
+                if (($type === 'thumb' || $isVideo) && !$usesApiKey) {
+                    $ttl = $type === 'thumb' ? S3_THUMB_URL_TTL : S3_VIDEO_URL_TTL;
+                    $cacheControl = $type === 'thumb'
+                        ? 'private, max-age=300'
+                        : 'private, no-store';
+                    header('Cache-Control: ' . $cacheControl);
+                    header('Location: ' . $s3->getPresignedUrl($key, $ttl), true, 307);
                     return;
                 }
 
