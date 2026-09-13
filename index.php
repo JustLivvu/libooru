@@ -655,19 +655,19 @@ function page_upload(?array $user, string $method): void
     View::flash();
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
     echo '<h1>Upload</h1>';
-    echo '<form method="post" enctype="multipart/form-data">';
+    echo '<form method="post" enctype="multipart/form-data" class="upload-form">';
     View::csrfField();
     $maxMb = MAX_FILE_SIZE / 1024 / 1024;
-    echo '<label>Image/Video (JPEG, PNG, GIF, WebP, MP4, WebM — max ' . $maxMb . ' MB)<br>';
-    echo '<input type="file" name="file" accept="image/*,video/mp4,video/webm" required></label><br>';
-    echo '<label>Tags (space-separated)<br><input name="tags" size="60" placeholder="character:foo artist:bar general_tag"></label><br>';
-    echo '<label>Rating<br><select name="rating">';
+    echo '<label><span>Image/Video <small>(JPEG, PNG, GIF, WebP, MP4, WebM — max ' . $maxMb . ' MB)</small></span>';
+    echo '<input type="file" name="file" accept="image/*,video/mp4,video/webm" required></label>';
+    echo '<label><span>Tags <small>(space-separated)</small></span><input name="tags" placeholder="character:foo artist:bar general_tag"></label>';
+    echo '<label class="upload-rating"><span>Rating</span><select name="rating">';
     foreach (['s' => 'Safe', 'q' => 'Questionable', 'e' => 'Explicit'] as $v => $l) {
         echo "<option value=\"{$v}\">{$l}</option>";
     }
-    echo '</select></label><br>';
-    echo '<label>Source URL<br><input name="source" size="60" placeholder="https://…"></label><br>';
-    echo '<label>Title<br><input name="title" size="60"></label><br>';
+    echo '</select></label>';
+    echo '<label><span>Source URL</span><input name="source" placeholder="https://…"></label>';
+    echo '<label><span>Title</span><input name="title"></label>';
     echo '<button>Upload</button>';
     echo '</form>';
     View::footer();

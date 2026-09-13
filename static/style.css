@@ -322,6 +322,48 @@ h3 {
   margin: 16px 0 12px 0;
 }
 
+/* ── Upload Form ──────────────────────────────────────────────────────────── */
+.upload-form {
+  display: flex;
+  width: min(100%, 640px);
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 0 12px;
+}
+
+.upload-form label {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.upload-form label > span {
+  line-height: 1.4;
+}
+
+.upload-form label small {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.upload-form input,
+.upload-form select {
+  width: 100%;
+}
+
+.upload-form input[type="file"] {
+  padding: 10px;
+}
+
+.upload-form .upload-rating {
+  max-width: 220px;
+}
+
+.upload-form > button {
+  align-self: flex-start;
+  margin-top: 4px;
+}
 /* ── Post Grid (Infinite / Scrolling UX) ─────────────────────────────────── */
 .post-grid {
   display: grid;
