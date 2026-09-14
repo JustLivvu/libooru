@@ -62,6 +62,7 @@ class Auth
             'manage_roles' => 'Create roles and assign roles to users',
             'manage_scraper' => 'Access and manage scrapers',
             'manage_post_reports' => 'Review and resolve post reports',
+            'manage_database_backups' => 'Configure, create, and restore database backups',
             'moderate_posts' => 'Edit and delete any user post',
             'moderate_comments' => 'Delete comments',
         ];

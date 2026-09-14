@@ -9,6 +9,7 @@ require_once __DIR__ . '/storage.php';
 require_once __DIR__ . '/image.php';
 require_once __DIR__ . '/post.php';
 require_once __DIR__ . '/view.php';
+require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/api.php';
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
@@ -1191,7 +1192,7 @@ function page_scraper(?array $user, string $method): void
 
 function page_admin(?array $user, string $method): void
 {
-    if (!Auth::can('access_admin_panel', $user) && !Auth::can('manage_post_reports', $user)) {
+    if (!Auth::can('access_admin_panel', $user) && !Auth::can('manage_post_reports', $user) && !Auth::can('manage_database_backups', $user)) {
         Router::redirect('/');
     }
     $permissionCatalog = Auth::permissionCatalog();
@@ -1213,6 +1214,9 @@ function page_admin(?array $user, string $method): void
             'decline_registration_request' => 'manage_registration_requests',
             'resolve_post_report' => 'manage_post_reports',
             'dismiss_post_report' => 'manage_post_reports',
+            'backup_settings' => 'manage_database_backups',
+            'create_database_backup' => 'manage_database_backups',
+            'restore_database_backup' => 'manage_database_backups',
         ];
         if (isset($permissionByAction[$action]) && !Auth::can($permissionByAction[$action], $user)) {
             View::setFlash('You do not have permission to perform this action.', 'error');
@@ -1339,6 +1343,36 @@ function page_admin(?array $user, string $method): void
             View::setSiteSetting('s3_access_key', $accessKey);
             View::setSiteSetting('s3_secret_key', $secretKey);
             View::setFlash('Storage settings saved.', 'ok');
+        } elseif ($action === 'backup_settings') {
+            $endpoint = trim((string)($_POST['backup_s3_endpoint'] ?? ''));
+            $region = trim((string)($_POST['backup_s3_region'] ?? 'us-east-1'));
+            $bucket = trim((string)($_POST['backup_s3_bucket'] ?? ''));
+            $accessKey = trim((string)($_POST['backup_s3_access_key'] ?? ''));
+            $secretKey = trim((string)($_POST['backup_s3_secret_key'] ?? ''));
+            View::setSiteSetting('backup_s3_endpoint', $endpoint);
+            View::setSiteSetting('backup_s3_region', $region ?: 'us-east-1');
+            View::setSiteSetting('backup_s3_bucket', $bucket);
+            View::setSiteSetting('backup_s3_access_key', $accessKey);
+            if ($secretKey !== '') View::setSiteSetting('backup_s3_secret_key', $secretKey);
+            View::setFlash('Database backup settings saved.', 'ok');
+        } elseif ($action === 'create_database_backup') {
+            try {
+                $backup = DatabaseBackup::create();
+                View::setFlash('Database backup created: ' . $backup['key'], 'ok');
+            } catch (Throwable $e) {
+                View::setFlash('Could not create database backup: ' . $e->getMessage(), 'error');
+            }
+        } elseif ($action === 'restore_database_backup') {
+            try {
+                $result = DatabaseBackup::restore((string)($_POST['backup_key'] ?? ''));
+                View::setFlash(
+                    'Database restored. A pre-rollback S3 backup and local emergency copy were created at '
+                    . $result['local_emergency_path'] . '.',
+                    'ok'
+                );
+            } catch (Throwable $e) {
+                View::setFlash('Could not restore database backup: ' . $e->getMessage(), 'error');
+            }
         } elseif ($action === 'registrations_settings') {
             $disableReg = isset($_POST['disable_registrations']) ? '1' : '0';
             $requireRegistrationReason = isset($_POST['require_registration_reason']) ? '1' : '0';
@@ -1391,6 +1425,9 @@ function page_admin(?array $user, string $method): void
             'registrations_settings' => 'registrations-content',
             'resolve_post_report' => 'post-reports',
             'dismiss_post_report' => 'post-reports',
+            'backup_settings' => 'database-backups',
+            'create_database_backup' => 'database-backups',
+            'restore_database_backup' => 'database-backups',
             'approve_registration_request' => 'registration-requests',
             'decline_registration_request' => 'registration-requests',
             'delete_user' => 'users',
@@ -1441,6 +1478,21 @@ function page_admin(?array $user, string $method): void
     $curS3Bucket      = View::siteSetting('s3_bucket', '');
     $curS3AccessKey   = View::siteSetting('s3_access_key', '');
     $curS3SecretKey   = View::siteSetting('s3_secret_key', '');
+    $curBackupS3Endpoint = View::siteSetting('backup_s3_endpoint', '');
+    $curBackupS3Region = View::siteSetting('backup_s3_region', 'us-east-1');
+    $curBackupS3Bucket = View::siteSetting('backup_s3_bucket', '');
+    $curBackupS3AccessKey = View::siteSetting('backup_s3_access_key', '');
+    $backupS3SecretConfigured = View::siteSetting('backup_s3_secret_key', '') !== '';
+    $databaseBackups = [];
+    $databaseBackupListError = '';
+    if (Auth::can('manage_database_backups', $user) && DatabaseBackup::isConfigured()) {
+        try {
+            $databaseBackups = DatabaseBackup::list();
+        } catch (Throwable $e) {
+            $databaseBackupListError = $e->getMessage();
+        }
+    }
+
 
     View::header('Panel', $user);
     View::flash();
@@ -1532,6 +1584,61 @@ function page_admin(?array $user, string $method): void
     echo '<button style="align-self:flex-start;">Save Storage Settings</button>';
     echo '</form>';
     echo '</div></details>';
+    }
+
+    // Database backups
+    if (Auth::can('manage_database_backups', $user)) {
+        echo '<details class="admin-section"' . ($openSection === 'database-backups' ? ' open' : '') . '>';
+        echo '<summary>Database backups <span class="admin-section-count">' . count($databaseBackups) . '</span></summary>';
+        echo '<div class="admin-section-content">';
+        echo '<p style="color:var(--text-muted)">Backups contain the SQLite database only. Media files are not included.</p>';
+        echo '<h3>Backup S3 settings</h3>';
+        echo '<form method="post" style="max-width:500px;display:flex;flex-direction:column;gap:15px">';
+        View::csrfField();
+        echo '<input type="hidden" name="action" value="backup_settings">';
+        echo '<label><span>Endpoint</span><input name="backup_s3_endpoint" value="' . View::e($curBackupS3Endpoint) . '" placeholder="https://s3.amazonaws.com"></label>';
+        echo '<label><span>Region</span><input name="backup_s3_region" value="' . View::e($curBackupS3Region) . '" placeholder="us-east-1"></label>';
+        echo '<label><span>Backup bucket</span><input name="backup_s3_bucket" value="' . View::e($curBackupS3Bucket) . '"></label>';
+        echo '<label><span>Access key</span><input name="backup_s3_access_key" value="' . View::e($curBackupS3AccessKey) . '" autocomplete="off"></label>';
+        echo '<label><span>Secret key</span><input type="password" name="backup_s3_secret_key" value="" autocomplete="new-password" placeholder="' . ($backupS3SecretConfigured ? 'Configured — leave blank to keep it' : 'Enter secret key') . '"></label>';
+        echo '<button style="align-self:flex-start">Save backup settings</button>';
+        echo '</form>';
+
+        if (DatabaseBackup::isConfigured()) {
+            echo '<form method="post" style="margin:24px 0">';
+            View::csrfField();
+            echo '<input type="hidden" name="action" value="create_database_backup">';
+            echo '<button>Create backup now</button>';
+            echo '</form>';
+
+            if ($databaseBackupListError !== '') {
+                echo '<p class="flash error">Could not list backups: ' . View::e($databaseBackupListError) . '</p>';
+            } elseif (!$databaseBackups) {
+                echo '<p>No backups found in the configured bucket.</p>';
+            } else {
+                echo '<div style="overflow-x:auto"><table style="width:100%">';
+                echo '<thead><tr><th>Backup</th><th>Created</th><th>Size</th><th>Action</th></tr></thead><tbody>';
+                foreach ($databaseBackups as $backupObject) {
+                    $modified = strtotime($backupObject['last_modified']);
+                    echo '<tr>';
+                    echo '<td><code>' . View::e($backupObject['key']) . '</code></td>';
+                    echo '<td>' . View::e($modified ? date('Y-m-d H:i:s', $modified) : $backupObject['last_modified']) . '</td>';
+                    echo '<td>' . View::e(number_format($backupObject['size'] / 1048576, 2)) . ' MB</td>';
+                    echo '<td><form method="post" onsubmit="return confirm(\'Rollback the live database to this backup? A pre-rollback backup will be created first.\')">';
+                    View::csrfField();
+                    echo '<input type="hidden" name="action" value="restore_database_backup">';
+                    echo '<input type="hidden" name="backup_key" value="' . View::e($backupObject['key']) . '">';
+                    echo '<button>Rollback to this backup</button>';
+                    echo '</form></td>';
+                    echo '</tr>';
+                }
+                echo '</tbody></table></div>';
+            }
+        } else {
+            echo '<p>Save a complete backup S3 configuration to create and restore backups.</p>';
+        }
+
+        echo '</div></details>';
     }
 
     // Registrations & Content settings

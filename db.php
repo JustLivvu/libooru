@@ -21,6 +21,11 @@ class DB
         return self::$pdo;
     }
 
+    public static function close(): void
+    {
+        self::$pdo = null;
+    }
+
     private static function migrate(PDO $pdo): void
     {
         $pdo->exec("

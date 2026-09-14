@@ -138,7 +138,7 @@ HTML;
             echo '    <a style="margin-left: auto;" href="' . $e(SITE_BASE) . '/user/' . $e($user['name']) . '">' . $e($user['name']) . '</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/favorites">Favorites</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/settings">Settings</a>' . "\n";
-            if (Auth::can('access_admin_panel', $user) || Auth::can('manage_post_reports', $user)) {
+            if (Auth::can('access_admin_panel', $user) || Auth::can('manage_post_reports', $user) || Auth::can('manage_database_backups', $user)) {
                 echo '    <a href="' . $e(SITE_BASE) . '/admin">Panel</a>' . "\n";
             }
             if (Auth::can('manage_scraper', $user)) {

@@ -3,4 +3,5 @@ data/thumbs/*
 data/sessions/*
 data/*.db*
 data/*.log
+data/*
 tmp.log

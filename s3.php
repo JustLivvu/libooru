@@ -15,6 +15,22 @@ class S3Client
 
     public function __construct(string $endpoint, string $region, string $bucket, string $accessKey, string $secretKey)
     {
+        $endpoint = trim($endpoint);
+        if ($endpoint === '') {
+            throw new RuntimeException('S3 endpoint is required.');
+        }
+        if (!preg_match('#^https?://#i', $endpoint)) {
+            $endpoint = 'https://' . $endpoint;
+        }
+
+        $parsedEndpoint = parse_url($endpoint);
+        if (!is_array($parsedEndpoint)
+            || empty($parsedEndpoint['host'])
+            || !in_array(strtolower((string)($parsedEndpoint['scheme'] ?? '')), ['http', 'https'], true)
+        ) {
+            throw new RuntimeException('S3 endpoint must be a valid HTTP or HTTPS URL.');
+        }
+
         $this->endpoint  = rtrim($endpoint, '/');
         $this->region    = $region ?: 'us-east-1';
         $this->bucket    = $bucket;
@@ -29,10 +45,16 @@ class S3Client
     {
         $key = ltrim($key, '/');
         if ($this->bucket !== '') {
-            $host = parse_url($this->endpoint, PHP_URL_HOST);
+            $host = (string)parse_url($this->endpoint, PHP_URL_HOST);
             $scheme = parse_url($this->endpoint, PHP_URL_SCHEME) ?: 'https';
             $port = parse_url($this->endpoint, PHP_URL_PORT);
             $portStr = $port ? ':' . $port : '';
+
+            // A virtual-hosted endpoint already contains the bucket name.
+            // In that form, adding it to the path produces an invalid request.
+            if (str_starts_with(strtolower($host), strtolower($this->bucket) . '.')) {
+                return "{$scheme}://{$host}{$portStr}/{$key}";
+            }
 
             return "{$scheme}://{$host}{$portStr}/{$this->bucket}/{$key}";
         }
@@ -93,7 +115,7 @@ class S3Client
     /**
      * Helper to make HTTP request using stream context (pure PHP fallback for cURL).
      */
-    private function httpRequest(string $method, string $url, array $headers, string $payload = ''): array
+    private function httpRequest(string $method, string $url, array $headers, string $payload = '', int $timeout = 300): array
     {
         $headerLines = [];
         foreach ($headers as $h) {
@@ -106,7 +128,7 @@ class S3Client
                 'header'        => implode("\r\n", $headerLines),
                 'content'       => $payload,
                 'ignore_errors' => true,
-                'timeout'       => 300,
+                'timeout'       => $timeout,
             ]
         ];
 
@@ -140,7 +162,8 @@ class S3Client
         }
 
         if ($res['code'] < 200 || $res['code'] >= 300) {
-            throw new RuntimeException("S3 upload failed (HTTP {$res['code']}).");
+            $detail = $this->getErrorDetail((string)($res['body'] ?? ''));
+            throw new RuntimeException("S3 upload failed (HTTP {$res['code']}){$detail}.");
         }
 
         return true;
@@ -162,7 +185,7 @@ class S3Client
         $command = [
             'curl', '--silent', '--show-error', '--max-time', '300',
             '--request', 'PUT', '--upload-file', $path,
-            '--output', '/dev/null', '--write-out', '%{http_code}',
+            '--output', '-', '--write-out', "\n__LIBOORU_HTTP_STATUS__%{http_code}",
         ];
         foreach ($headers as $header) {
             $command[] = '--header';
@@ -179,17 +202,37 @@ class S3Client
         if (!is_resource($process)) {
             throw new RuntimeException('Could not start the streaming S3 upload.');
         }
-        $statusText = trim((string)stream_get_contents($pipes[1]));
+        $responseText = (string)stream_get_contents($pipes[1]);
         $errorText = trim((string)stream_get_contents($pipes[2]));
         fclose($pipes[1]);
         fclose($pipes[2]);
         $exitCode = proc_close($process);
-        $httpCode = ctype_digit($statusText) ? (int)$statusText : 0;
 
         if ($exitCode !== 0) {
             throw new RuntimeException('Streaming S3 upload failed: ' . substr($errorText, 0, 300));
         }
-        return ['code' => $httpCode, 'body' => ''];
+        if (!preg_match('/\n__LIBOORU_HTTP_STATUS__(\d{3})$/', $responseText, $match, PREG_OFFSET_CAPTURE)) {
+            throw new RuntimeException('S3 upload returned an unreadable HTTP status.');
+        }
+
+        $body = substr($responseText, 0, $match[0][1]);
+        return ['code' => (int)$match[1][0], 'body' => $body];
+    }
+
+    private function getErrorDetail(string $body): string
+    {
+        if ($body === '') return '';
+
+        $xml = @simplexml_load_string($body);
+        if ($xml === false) return '';
+
+        $code = trim((string)($xml->Code ?? ''));
+        $message = trim((string)($xml->Message ?? ''));
+        if ($code === '' && $message === '') return '';
+
+        $detail = $code;
+        if ($message !== '') $detail .= ($detail !== '' ? ': ' : '') . $message;
+        return ' — ' . substr($detail, 0, 300);
     }
 
     /**
@@ -223,6 +266,83 @@ class S3Client
 
         return null;
     }
+    /** Download an object to a local file without loading it into memory. */
+    public function getObjectToFile(string $key, string $path): void
+    {
+        $key = ltrim($key, '/');
+        $url = $this->getUrl($key);
+        $headers = $this->createSignedHeaders('GET', $url, '');
+        $command = [
+            'curl', '--silent', '--show-error', '--max-time', '300',
+            '--request', 'GET', '--output', $path, '--write-out', '%{http_code}',
+        ];
+        foreach ($headers as $header) {
+            $command[] = '--header';
+            $command[] = $header;
+        }
+        $command[] = $url;
+
+        $pipes = [];
+        $process = proc_open($command, [
+            0 => ['file', '/dev/null', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ], $pipes);
+        if (!is_resource($process)) {
+            throw new RuntimeException('Could not start the streaming S3 download.');
+        }
+        $statusText = trim((string)stream_get_contents($pipes[1]));
+        $errorText = trim((string)stream_get_contents($pipes[2]));
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exitCode = proc_close($process);
+        $httpCode = ctype_digit($statusText) ? (int)$statusText : 0;
+
+        if ($exitCode !== 0 || $httpCode !== 200) {
+            @unlink($path);
+            throw new RuntimeException('S3 download failed' . ($httpCode ? " (HTTP {$httpCode})" : '') . ': ' . substr($errorText, 0, 300));
+        }
+    }
+
+    /** List objects below a prefix using S3 ListObjectsV2. */
+    public function listObjects(string $prefix = ''): array
+    {
+        $objects = [];
+        $continuationToken = null;
+
+        do {
+            $query = ['list-type' => '2', 'prefix' => ltrim($prefix, '/')];
+            if ($continuationToken !== null) {
+                $query['continuation-token'] = $continuationToken;
+            }
+            ksort($query, SORT_STRING);
+            $url = $this->getUrl('') . '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+            $headers = $this->createSignedHeaders('GET', $url, '');
+            $res = $this->httpRequest('GET', $url, $headers, '', 15);
+            if ($res['code'] !== 200) {
+                throw new RuntimeException("S3 object listing failed (HTTP {$res['code']}).");
+            }
+
+            $xml = @simplexml_load_string($res['body']);
+            if ($xml === false) {
+                throw new RuntimeException('S3 returned an invalid object listing.');
+            }
+            foreach ($xml->Contents as $item) {
+                $objects[] = [
+                    'key' => (string)$item->Key,
+                    'size' => (int)$item->Size,
+                    'last_modified' => (string)$item->LastModified,
+                ];
+            }
+            $continuationToken = ((string)$xml->IsTruncated === 'true')
+                ? (string)$xml->NextContinuationToken
+                : null;
+        } while ($continuationToken !== null && $continuationToken !== '');
+
+        usort($objects, fn(array $a, array $b): int => strcmp($b['last_modified'], $a['last_modified']));
+        return $objects;
+    }
+
 
     /**
      * Stream object directly to client output.
@@ -298,6 +418,9 @@ class S3Client
     private function createSignedHeadersForHash(string $method, string $url, string $payloadHash, string $contentType = ''): array
     {
         $parsedUrl = parse_url($url);
+        if (!is_array($parsedUrl) || empty($parsedUrl['host'])) {
+            throw new RuntimeException('Could not build a valid S3 request URL. Check the S3 endpoint.');
+        }
         $host   = $parsedUrl['host'] . (isset($parsedUrl['port']) ? ':' . $parsedUrl['port'] : '');
         $path   = $parsedUrl['path'] ?? '/';
         $query  = $parsedUrl['query'] ?? '';
