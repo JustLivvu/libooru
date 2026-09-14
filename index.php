@@ -254,6 +254,10 @@ function dispatch(string $method, string $path): void
     elseif ($path === '/terms') {
         page_terms($user);
     }
+    // User favorites
+    elseif (preg_match('#^/user/([^/]+)/favorites$#', $path, $m)) {
+        page_user_favorites($user, rawurldecode($m[1]));
+    }
     // User profile
     elseif (preg_match('#^/user/([^/]+)$#', $path, $m)) {
         page_user($user, rawurldecode($m[1]));
@@ -311,8 +315,8 @@ function page_home(?array $user): void
     echo '    <a href="' . View::url('/posts') . '">Browse Posts</a>';
     echo '    <a href="' . View::url('/upload') . '">Upload</a>';
     echo '    <a href="' . View::url('/tags') . '">Tags</a>';
-    echo '    <a href="' . View::url('/favorites') . '">Favorites</a>';
     if ($user) {
+        echo '    <a href="' . View::url('/favorites') . '">Favorites</a>';
         echo '    <a style="margin-left: auto;" href="' . View::url('/user/' . rawurlencode($user['name'])) . '">My Account</a>';
         echo '    <a href="' . View::url('/settings') . '">Settings</a>';
         if (Auth::can('access_admin_panel', $user)) {
@@ -857,7 +861,10 @@ function page_user(?array $user, string $targetName): void
     $myPages = $profilePosts['pages'];
 
     $isSelf = $user && (int)$user['id'] === (int)$target['id'];
-    $favTotal = (int)DB::scalar('SELECT COUNT(*) FROM favorites WHERE user_id = ?', [(int)$target['id']]);
+    $canSeeFavorites = $isSelf || ($user && View::siteSetting('show_user_favorites', '0') === '1');
+    $favTotal = $canSeeFavorites
+        ? (int)DB::scalar('SELECT COUNT(*) FROM favorites WHERE user_id = ?', [(int)$target['id']])
+        : 0;
 
     View::header('User: ' . $target['name'], $user);
     View::flash();
@@ -867,7 +874,13 @@ function page_user(?array $user, string $targetName): void
     echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border); width:40%;">Role</th><td style="padding:8px 12px; border:1px solid var(--border);">' . View::e($target['role']) . '</td></tr>';
     echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border);">Member since</th><td style="padding:8px 12px; border:1px solid var(--border);">' . View::e(date('Y-m-d', (int)$target['created_at'])) . '</td></tr>';
     echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border);">Posts</th><td style="padding:8px 12px; border:1px solid var(--border);">' . $myTotal . '</td></tr>';
-    echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border);">Favorites</th><td style="padding:8px 12px; border:1px solid var(--border);">' . $favTotal . '</td></tr>';
+    if ($canSeeFavorites) {
+        $favoritesUrl = $isSelf
+            ? '/favorites'
+            : '/user/' . rawurlencode($target['name']) . '/favorites';
+        $favoritesValue = '<a href="' . View::url($favoritesUrl) . '">' . $favTotal . '</a>';
+        echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border);">Favorites</th><td style="padding:8px 12px; border:1px solid var(--border);">' . $favoritesValue . '</td></tr>';
+    }
     if ($isSelf) {
         echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border);">Email</th><td style="padding:8px 12px; border:1px solid var(--border);">' . View::e($target['email'] ?: '—') . '</td></tr>';
     }
@@ -875,6 +888,41 @@ function page_user(?array $user, string $targetName): void
     echo '<h2>Posts</h2>';
     View::postGrid($myPosts);
     View::paginator($page, $myPages, '/user/' . rawurlencode($target['name']));
+    View::footer();
+}
+
+function page_user_favorites(?array $user, string $targetName): void
+{
+    Auth::require();
+    $target = DB::row('SELECT id, name FROM users WHERE name = ?', [$targetName]);
+    if (!$target) {
+        http_response_code(404);
+        View::header('User not found', $user);
+        echo '<h1>User not found</h1>';
+        View::footer();
+        return;
+    }
+
+    $isSelf = (int)$user['id'] === (int)$target['id'];
+    if (!$isSelf && View::siteSetting('show_user_favorites', '0') !== '1') {
+        View::setFlash('This user’s favorites are private.', 'error');
+        Router::redirect('/user/' . rawurlencode($target['name']));
+    }
+    if ($isSelf) {
+        Router::redirect('/favorites');
+    }
+
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $result = Post::listFavorites((int)$target['id'], $page, POSTS_PER_PAGE);
+    $favoritesPath = '/user/' . rawurlencode($target['name']) . '/favorites';
+    $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 50');
+
+    View::header($target['name'] . ' Favorites', $user, $sidebarTags);
+    View::flash();
+    echo '<h1>' . View::e($target['name']) . '’s Favorites</h1>';
+    echo '<p>' . $result['total'] . ' favorite posts</p>';
+    View::postGrid($result['posts']);
+    View::paginator($page, $result['pages'], $favoritesPath);
     View::footer();
 }
 
@@ -1269,6 +1317,7 @@ function page_admin(?array $user, string $method): void
             $registrationRequiresApproval = isset($_POST['registration_requires_approval']) ? '1' : '0';
             $requireLogin = isset($_POST['require_login_posts']) ? '1' : '0';
             $enableAdultWarning = isset($_POST['enable_adult_warning']) ? '1' : '0';
+            $showUserFavorites = isset($_POST['show_user_favorites']) ? '1' : '0';
             $enableRegistrationCaptcha = isset($_POST['enable_registration_captcha']) ? '1' : '0';
             $turnstileSiteKey = trim($_POST['turnstile_site_key'] ?? '');
             $turnstileSecretKey = trim($_POST['turnstile_secret_key'] ?? '');
@@ -1280,6 +1329,7 @@ function page_admin(?array $user, string $method): void
             View::setSiteSetting('registration_requires_approval', $registrationRequiresApproval);
             View::setSiteSetting('require_login_posts', $requireLogin);
             View::setSiteSetting('enable_adult_warning', $enableAdultWarning);
+            View::setSiteSetting('show_user_favorites', $showUserFavorites);
             View::setSiteSetting('turnstile_site_key', $turnstileSiteKey);
             if ($turnstileSecretKey !== '') View::setSiteSetting('turnstile_secret_key', $turnstileSecretKey);
             if ($enableRegistrationCaptcha === '1' && ($turnstileSiteKey === '' || $savedTurnstileSecretKey === '')) {
@@ -1438,6 +1488,7 @@ function page_admin(?array $user, string $method): void
     $curRegistrationRequiresApproval = View::siteSetting('registration_requires_approval', '0');
     $curRequireLogin = View::siteSetting('require_login_posts', '0');
     $curEnableAdultWarning = View::siteSetting('enable_adult_warning', '0');
+    $curShowUserFavorites = View::siteSetting('show_user_favorites', '0');
     $curEnableRegistrationCaptcha = View::siteSetting('enable_registration_captcha', '0');
     $curTurnstileSiteKey = View::siteSetting('turnstile_site_key', '');
     $hasTurnstileSecretKey = View::siteSetting('turnstile_secret_key', '') !== '';
@@ -1462,6 +1513,9 @@ function page_admin(?array $user, string $method): void
     echo '<label style="display:flex; align-items:center; gap:5px;">';
     echo '<input type="checkbox" name="enable_adult_warning" value="1"' . ($curEnableAdultWarning === '1' ? ' checked' : '') . '> ';
     echo '<span>Enable 18+ warning</span></label>';
+    echo '<label style="display:flex; align-items:center; gap:5px;">';
+    echo '<input type="checkbox" name="show_user_favorites" value="1"' . ($curShowUserFavorites === '1' ? ' checked' : '') . '> ';
+    echo '<span>Let users see other users’ favorites</span></label>';
     echo '<label style="display:flex; align-items:center; gap:5px;">';
     echo '<input type="checkbox" name="enable_registration_captcha" value="1" aria-controls="turnstile-fields" onchange="document.getElementById(\'turnstile-fields\').style.display = this.checked ? \'flex\' : \'none\';"' . ($curEnableRegistrationCaptcha === '1' ? ' checked' : '') . '> ';
     echo '<span>Enable registration captcha</span></label>';
