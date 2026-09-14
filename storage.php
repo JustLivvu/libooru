@@ -13,6 +13,24 @@ class Storage
     private static ?S3Client $s3Client = null;
 
     /**
+     * Keep media compatible with buckets populated by the original path-style
+     * client. Some S3 providers expose a bucket-named endpoint while still
+     * storing the bucket name as the first key segment.
+     */
+    private static function s3MediaKey(string $key): string
+    {
+        $key = ltrim($key, '/');
+        $bucket = trim(View::siteSetting('s3_bucket'), '/');
+        $endpointHost = strtolower((string)parse_url(View::siteSetting('s3_endpoint'), PHP_URL_HOST));
+
+        if ($bucket !== '' && str_starts_with($endpointHost, strtolower($bucket) . '.')) {
+            return $bucket . '/' . $key;
+        }
+
+        return $key;
+    }
+
+    /**
      * Get configured storage driver: 'local' or 's3'.
      */
     public static function getDriver(): string
@@ -55,7 +73,7 @@ class Storage
             }
 
             // Upload full media to S3 under uploads/
-            $s3->putObject('uploads/' . $filename, $uploadTmpPath, $uploadMime, true);
+            $s3->putObject(self::s3MediaKey('uploads/' . $filename), $uploadTmpPath, $uploadMime, true);
 
             // Determine thumbnail extension
             $thumbExt = pathinfo($filename, PATHINFO_EXTENSION);
@@ -66,7 +84,7 @@ class Storage
             }
 
             // Upload thumbnail to S3 under thumbs/
-            $s3->putObject('thumbs/' . $thumbFilename, $thumbTmpPath, $thumbMime, true);
+            $s3->putObject(self::s3MediaKey('thumbs/' . $thumbFilename), $thumbTmpPath, $thumbMime, true);
 
             return true;
         }
@@ -119,8 +137,8 @@ class Storage
             $s3 = self::getS3Client();
             if ($s3) {
                 try {
-                    $s3->deleteObject('uploads/' . $filename);
-                    $s3->deleteObject('thumbs/' . $thumbFilename);
+                    $s3->deleteObject(self::s3MediaKey('uploads/' . $filename));
+                    $s3->deleteObject(self::s3MediaKey('thumbs/' . $thumbFilename));
                 } catch (Throwable) {}
             }
         } else {
@@ -183,7 +201,7 @@ class Storage
         if ($driver === 's3') {
             $s3 = self::getS3Client();
             if ($s3) {
-                $key = ($type === 'thumb' ? 'thumbs/' : 'uploads/') . $filename;
+                $key = self::s3MediaKey(($type === 'thumb' ? 'thumbs/' : 'uploads/') . $filename);
 
                 // Authenticate in the application, but let object storage serve
                 // browser thumbnails and large videos. This keeps PHP-FPM workers
