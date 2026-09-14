@@ -438,6 +438,7 @@ function page_post(?array $user, int $id): void
     $isOwner  = $user && (int)$user['id'] === (int)$post['user_id'];
     $canModeratePosts = $user && Auth::can('moderate_posts', $user);
     $canModerateComments = $user && Auth::can('moderate_comments', $user);
+    $hasPendingReport = $user && Post::hasPendingReport($id, (int)$user['id']);
 
     echo '<article class="post-view">';
     echo '<h1>Post #' . View::e($id) . '</h1>';
@@ -493,6 +494,18 @@ function page_post(?array $user, int $id): void
             echo '<button type="submit">☆ Add to Favorites</button>';
         }
         echo '</form> ';
+        if ($hasPendingReport) {
+            echo '<span>Report pending review.</span> ';
+        } else {
+            echo '<details style="display:inline-block;vertical-align:top"><summary class="button" style="cursor:pointer">Report post</summary>';
+            echo '<form method="post" action="' . View::url('/post/' . $id) . '" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;min-width:280px">';
+            View::csrfField();
+            echo '<input type="hidden" name="action" value="report">';
+            echo '<label><span>Reason</span><textarea name="reason" rows="3" minlength="3" maxlength="' . MAX_POST_REPORT_LENGTH . '" required></textarea></label>';
+            echo '<button type="submit">Submit report</button>';
+            echo '</form>';
+            echo '</details> ';
+        }
     }
     if ($isOwner || $canModeratePosts) {
         echo '<a href="' . View::url('/post/' . $id . '/edit') . '"><button type="button">Edit</button></a> ';
@@ -555,6 +568,17 @@ function post_handle(?array $user, int $id): void
             }
             Post::addComment($id, $body, Auth::id());
             View::setFlash('Comment posted.', 'ok');
+        } catch (RuntimeException $e) {
+            View::setFlash($e->getMessage(), 'error');
+        }
+    } elseif ($action === 'report') {
+        Auth::require();
+        try {
+            if (!DB::consumeRateLimit('post_report', 'user:' . (int)$user['id'], POST_REPORT_RATE_LIMIT, POST_REPORT_RATE_WINDOW)) {
+                throw new RuntimeException('Too many reports. Please try again later.');
+            }
+            Post::report($id, (int)$user['id'], (string)($_POST['reason'] ?? ''));
+            View::setFlash('Post reported. Thank you.', 'ok');
         } catch (RuntimeException $e) {
             View::setFlash($e->getMessage(), 'error');
         }
@@ -1167,7 +1191,9 @@ function page_scraper(?array $user, string $method): void
 
 function page_admin(?array $user, string $method): void
 {
-    Auth::requirePermission('access_admin_panel');
+    if (!Auth::can('access_admin_panel', $user) && !Auth::can('manage_post_reports', $user)) {
+        Router::redirect('/');
+    }
     $permissionCatalog = Auth::permissionCatalog();
 
     if ($method === 'POST') {
@@ -1185,6 +1211,8 @@ function page_admin(?array $user, string $method): void
             'registrations_settings' => 'manage_registration_settings',
             'approve_registration_request' => 'manage_registration_requests',
             'decline_registration_request' => 'manage_registration_requests',
+            'resolve_post_report' => 'manage_post_reports',
+            'dismiss_post_report' => 'manage_post_reports',
         ];
         if (isset($permissionByAction[$action]) && !Auth::can($permissionByAction[$action], $user)) {
             View::setFlash('You do not have permission to perform this action.', 'error');
@@ -1339,6 +1367,15 @@ function page_admin(?array $user, string $method): void
                 View::setSiteSetting('enable_registration_captcha', $enableRegistrationCaptcha);
                 View::setFlash('Registrations & Content settings saved.', 'ok');
             }
+        } elseif (in_array($action, ['resolve_post_report', 'dismiss_post_report'], true)) {
+            $reportId = (int)($_POST['report_id'] ?? 0);
+            $status = $action === 'resolve_post_report' ? 'resolved' : 'dismissed';
+            $updated = $reportId > 0 ? DB::exec(
+                "UPDATE post_reports SET status = ?, resolved_by = ?, resolved_at = unixepoch()
+                 WHERE id = ? AND status = 'pending'",
+                [$status, (int)$user['id'], $reportId]
+            ) : 0;
+            View::setFlash($updated ? 'Post report ' . $status . '.' : 'Report was not found or was already reviewed.', $updated ? 'ok' : 'error');
         } elseif ($action === 'approve_registration_request') {
             $requestId = (int)($_POST['request_id'] ?? 0);
             $approved = Auth::approveRegistrationRequest($requestId);
@@ -1352,6 +1389,8 @@ function page_admin(?array $user, string $method): void
             'site_settings' => 'site-settings',
             'storage_settings' => 'media-storage',
             'registrations_settings' => 'registrations-content',
+            'resolve_post_report' => 'post-reports',
+            'dismiss_post_report' => 'post-reports',
             'approve_registration_request' => 'registration-requests',
             'decline_registration_request' => 'registration-requests',
             'delete_user' => 'users',
@@ -1373,6 +1412,18 @@ function page_admin(?array $user, string $method): void
     $roleNames = array_column($roles, 'name', 'slug');
     $users        = DB::rows('SELECT id, name, email, registration_reason, role, api_key, created_at FROM users ORDER BY id DESC');
     $registrationRequests = DB::rows('SELECT id, name, email, registration_reason, created_at FROM registration_requests ORDER BY created_at ASC');
+    $postReports = [];
+    $pendingPostReportCount = 0;
+    if (Auth::can('manage_post_reports', $user)) {
+        $postReports = DB::rows(
+            "SELECT pr.*, reporter.name AS reporter_name, resolver.name AS resolver_name
+             FROM post_reports pr
+             LEFT JOIN users reporter ON reporter.id = pr.reporter_user_id
+             LEFT JOIN users resolver ON resolver.id = pr.resolved_by
+             ORDER BY CASE pr.status WHEN 'pending' THEN 0 ELSE 1 END, pr.created_at DESC"
+        );
+        $pendingPostReportCount = (int)DB::scalar("SELECT COUNT(*) FROM post_reports WHERE status = 'pending'");
+    }
     $postCount    = (int)DB::scalar('SELECT COUNT(*) FROM posts');
     $tagCount     = (int)DB::scalar('SELECT COUNT(*) FROM tags');
     $commentCount = (int)DB::scalar('SELECT COUNT(*) FROM comments');
@@ -1396,6 +1447,7 @@ function page_admin(?array $user, string $method): void
     echo '<h1>Panel</h1>';
 
     // Stats
+    if (Auth::can('access_admin_panel', $user)) {
     echo '<details class="admin-section"' . ($openSection === 'statistics' ? ' open' : '') . '>';
     echo '<summary>Statistics</summary>';
     echo '<div class="admin-section-content">';
@@ -1408,6 +1460,7 @@ function page_admin(?array $user, string $method): void
     echo '</tbody>';
     echo '</table>';
     echo '</div></details>';
+    }
 
     // Site settings
     if (Auth::can('manage_site_settings', $user)) {
@@ -1527,6 +1580,46 @@ function page_admin(?array $user, string $method): void
     echo '<button style="align-self:flex-start;">Save Settings</button>';
     echo '</form>';
     echo '</div></details>';
+    }
+
+    // Post reports
+    if (Auth::can('manage_post_reports', $user)) {
+        echo '<details class="admin-section"' . ($openSection === 'post-reports' ? ' open' : '') . '>';
+        echo '<summary>Post reports <span class="admin-section-count">' . $pendingPostReportCount . ' pending</span></summary>';
+        echo '<div class="admin-section-content">';
+        if (!$postReports) {
+            echo '<p>No post reports.</p>';
+        } else {
+            echo '<div style="overflow-x:auto"><table>';
+            echo '<thead><tr><th>Post</th><th>Reporter</th><th>Reason</th><th>Reported</th><th>Status</th><th>Reviewed by</th><th>Actions</th></tr></thead><tbody>';
+            foreach ($postReports as $report) {
+                $resolvedBy = $report['resolver_name'] ?: '—';
+                if ($report['resolved_at']) {
+                    $resolvedBy .= ' (' . date('Y-m-d H:i', (int)$report['resolved_at']) . ')';
+                }
+                echo '<tr>';
+                echo '<td><a href="' . View::url('/post/' . (int)$report['post_id']) . '">#' . (int)$report['post_id'] . '</a></td>';
+                echo '<td>' . View::e($report['reporter_name'] ?: 'Deleted user') . '</td>';
+                echo '<td style="min-width:240px">' . nl2br(View::e($report['reason'])) . '</td>';
+                echo '<td>' . View::e(date('Y-m-d H:i', (int)$report['created_at'])) . '</td>';
+                echo '<td>' . View::e(ucfirst($report['status'])) . '</td>';
+                echo '<td>' . View::e($resolvedBy) . '</td>';
+                echo '<td style="white-space:nowrap">';
+                if ($report['status'] === 'pending') {
+                    echo '<form method="post" style="display:inline">';
+                    View::csrfField();
+                    echo '<input type="hidden" name="action" value="resolve_post_report"><input type="hidden" name="report_id" value="' . (int)$report['id'] . '"><button>Resolve</button></form> ';
+                    echo '<form method="post" style="display:inline">';
+                    View::csrfField();
+                    echo '<input type="hidden" name="action" value="dismiss_post_report"><input type="hidden" name="report_id" value="' . (int)$report['id'] . '"><button>Dismiss</button></form>';
+                } else {
+                    echo '—';
+                }
+                echo '</td></tr>';
+            }
+            echo '</tbody></table></div>';
+        }
+        echo '</div></details>';
     }
 
     // Registration requests

@@ -43,5 +43,10 @@ define('MAX_COMMENT_LENGTH', 4_000); // bytes
 define('COMMENT_RATE_LIMIT', 10);
 define('COMMENT_RATE_WINDOW', 60); // seconds
 
+// Post report abuse protection.
+define('MAX_POST_REPORT_LENGTH', 1_000); // bytes
+define('POST_REPORT_RATE_LIMIT', 5);
+define('POST_REPORT_RATE_WINDOW', 3600); // seconds
+
 // API key header
 define('API_KEY_HEADER', 'X-API-Key');

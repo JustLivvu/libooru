@@ -61,6 +61,7 @@ class Auth
             'manage_users' => 'Delete users and regenerate API keys',
             'manage_roles' => 'Create roles and assign roles to users',
             'manage_scraper' => 'Access and manage scrapers',
+            'manage_post_reports' => 'Review and resolve post reports',
             'moderate_posts' => 'Edit and delete any user post',
             'moderate_comments' => 'Delete comments',
         ];

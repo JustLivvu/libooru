@@ -103,6 +103,18 @@ class DB
                 PRIMARY KEY (user_id, post_id)
             );
 
+            CREATE TABLE IF NOT EXISTS post_reports (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                post_id          INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+                reporter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                reason           TEXT NOT NULL,
+                status           TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'resolved', 'dismissed')),
+                resolved_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                created_at       INTEGER NOT NULL DEFAULT (unixepoch()),
+                resolved_at      INTEGER,
+                UNIQUE(post_id, reporter_user_id)
+            );
+
             CREATE TABLE IF NOT EXISTS site_settings (
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL DEFAULT ''
@@ -129,7 +141,7 @@ class DB
             CREATE INDEX IF NOT EXISTS idx_post_tags_post ON post_tags(post_id);
             CREATE INDEX IF NOT EXISTS idx_post_tags_tag  ON post_tags(tag_id);
             CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
-            CREATE INDEX IF NOT EXISTS idx_posts_quality  ON posts(quality);
+            CREATE INDEX IF NOT EXISTS idx_post_reports_status_created ON post_reports(status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_registration_requests_created ON registration_requests(created_at ASC);
         ");
 
@@ -165,6 +177,7 @@ class DB
         if (!$hasQuality) {
             $pdo->exec("ALTER TABLE posts ADD COLUMN quality TEXT NOT NULL DEFAULT 'medium'");
         }
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_quality ON posts(quality)');
 
         // Auto-calculate quality for posts based on resolution (width & height)
         $pdo->exec("

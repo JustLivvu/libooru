@@ -376,6 +376,38 @@ class Post
         DB::exec('UPDATE posts SET score = ? WHERE id = ?', [$score, $postId]);
     }
 
+    // -------- reports --------
+
+    public static function report(int $postId, int $userId, string $reason): void
+    {
+        $reason = trim($reason);
+        if (strlen($reason) < 3 || strlen($reason) > MAX_POST_REPORT_LENGTH) {
+            throw new RuntimeException('Report reason must contain between 3 and ' . MAX_POST_REPORT_LENGTH . ' characters.');
+        }
+        if (!DB::scalar('SELECT id FROM posts WHERE id = ?', [$postId])) {
+            throw new RuntimeException('Post not found.');
+        }
+        if (DB::scalar("SELECT id FROM post_reports WHERE post_id = ? AND reporter_user_id = ? AND status = 'pending'", [$postId, $userId])) {
+            throw new RuntimeException('You have already reported this post.');
+        }
+
+        DB::exec(
+            "INSERT INTO post_reports (post_id, reporter_user_id, reason)
+             VALUES (?, ?, ?)
+             ON CONFLICT(post_id, reporter_user_id) DO UPDATE SET
+                reason = excluded.reason,
+                status = 'pending',
+                resolved_by = NULL,
+                resolved_at = NULL,
+                created_at = unixepoch()",
+            [$postId, $userId, $reason]
+        );
+    }
+
+    public static function hasPendingReport(int $postId, int $userId): bool
+    {
+        return (bool)DB::scalar("SELECT id FROM post_reports WHERE post_id = ? AND reporter_user_id = ? AND status = 'pending'", [$postId, $userId]);
+    }
     // -------- favorites --------
 
     public static function addFavorite(int $postId, int $userId): void
