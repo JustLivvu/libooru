@@ -9,6 +9,7 @@ require_once __DIR__ . '/storage.php';
 require_once __DIR__ . '/image.php';
 require_once __DIR__ . '/post.php';
 require_once __DIR__ . '/view.php';
+require_once __DIR__ . '/seo.php';
 require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/api.php';
 
@@ -194,8 +195,21 @@ function dispatch(string $method, string $path): void
 {
     $user = Auth::current();
 
+    // Search-engine discovery endpoints
+    if ($path === '/robots.txt') {
+        page_robots();
+    }
+    elseif ($path === '/sitemap.xml') {
+        page_sitemap_index();
+    }
+    elseif ($path === '/sitemap-pages.xml') {
+        page_sitemap_pages();
+    }
+    elseif (preg_match('#^/sitemap-posts-(\d+)\.xml$#', $path, $m)) {
+        page_sitemap_posts((int)$m[1]);
+    }
     // Home
-    if ($path === '/' || $path === '') {
+    elseif ($path === '/' || $path === '') {
         page_home($user);
     }
     // Browse /posts
@@ -296,7 +310,12 @@ function page_home(?array $user): void
     $visitors++;
     View::setSiteSetting('visitor_count', (string)$visitors);
 
-    View::header(SITE_NAME, $user);
+    View::header(SITE_NAME, $user, null, [
+        'canonical' => View::url('/'),
+        'image' => false,
+        'description' => View::siteSetting('site_description', '')
+            ?: 'Browse and discover thousands of tagged images and videos by rating and quality on ' . View::siteSetting('site_name', SITE_NAME) . '.',
+    ]);
     View::flash();
     
     $siteName = View::siteSetting('site_name', SITE_NAME);
@@ -374,7 +393,14 @@ function page_posts(?array $user): void
 
     $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 50');
 
-    View::header('Browse Posts', $user, $sidebarTags);
+    $browseTitle = $q !== '' ? str_replace('_', ' ', $q) . ' posts' : 'Browse Posts';
+    $browseDescription = $q !== ''
+        ? 'Browse posts tagged ' . str_replace('_', ' ', $q) . ' on ' . View::siteSetting('site_name', SITE_NAME) . '.'
+        : 'Browse the newest and top-rated tagged images and videos on ' . View::siteSetting('site_name', SITE_NAME) . '.';
+    View::header($browseTitle, $user, $sidebarTags, [
+        'description' => $browseDescription,
+        'canonical' => View::url('/posts', array_filter(['q' => $q, 'page' => $page > 1 ? $page : null])),
+    ]);
     View::flash();
     echo '<h1>Browse</h1>';
 
@@ -432,10 +458,40 @@ function page_post(?array $user, int $id): void
     // Try to get counts for these tags if possible, or just pass as is
     // Actually $post['tags'] already has 'name'. View::sidebar handles missing 'count'.
 
-    View::header('Post #' . $id, $user, $tags);
+    $fileUrl = Image::fileUrl($post['filename']);
+    $thumbUrl = Image::thumbUrl($post['filename']);
+    $tagNames = array_column($tags, 'name');
+    $readableTags = array_map(fn($tag) => str_replace('_', ' ', $tag), array_slice($tagNames, 0, 8));
+    $postTitle = trim((string)($post['title'] ?? ''));
+    if ($postTitle === '') {
+        $postTitle = $readableTags
+            ? implode(', ', array_slice($readableTags, 0, 4)) . ' - Post #' . $id
+            : 'Post #' . $id;
+    }
+    $description = 'View post #' . $id;
+    if ($readableTags) $description .= ' tagged ' . implode(', ', $readableTags);
+    $description .= ' on ' . View::siteSetting('site_name', SITE_NAME) . '.';
+
+    View::header($postTitle, $user, $tags, [
+        'description' => $description,
+        'canonical' => View::url('/post/' . $id),
+        'type' => 'article',
+        'image' => $thumbUrl,
+        'image_alt' => $readableTags ? implode(', ', $readableTags) : 'Post #' . $id,
+        'json_ld' => [
+            '@context' => 'https://schema.org',
+            '@type' => 'ImageObject',
+            'name' => $postTitle,
+            'description' => $description,
+            'contentUrl' => View::absoluteUrl($fileUrl),
+            'thumbnailUrl' => View::absoluteUrl($thumbUrl),
+            'width' => (int)$post['width'],
+            'height' => (int)$post['height'],
+            'uploadDate' => date(DATE_ATOM, (int)$post['created_at']),
+        ],
+    ]);
     View::flash();
 
-    $fileUrl  = Image::fileUrl($post['filename']);
     $isOwner  = $user && (int)$user['id'] === (int)$post['user_id'];
     $canModeratePosts = $user && Auth::can('moderate_posts', $user);
     $canModerateComments = $user && Auth::can('moderate_comments', $user);
@@ -450,7 +506,7 @@ function page_post(?array $user, int $id): void
         echo '<video src="' . View::e($fileUrl) . '" controls loop playsinline preload="metadata"></video>';
     } else {
         echo '<a href="' . View::e($fileUrl) . '">';
-        echo '<img src="' . View::e($fileUrl) . '" alt="post #' . View::e($id) . '">';
+        echo '<img src="' . View::e($fileUrl) . '" alt="' . View::e($readableTags ? implode(', ', $readableTags) : 'Post #' . $id) . '">';
         echo '</a>';
     }
     echo '</div>';
@@ -1309,9 +1365,11 @@ function page_admin(?array $user, string $method): void
             View::setFlash('API key regenerated.', 'ok');
         } elseif ($action === 'site_settings') {
             $name    = trim($_POST['site_name'] ?? '');
+            $description = trim($_POST['site_description'] ?? '');
             $default = trim($_POST['default_blacklist'] ?? '');
             $terms   = trim($_POST['terms_of_service'] ?? '');
             if ($name !== '') View::setSiteSetting('site_name', $name);
+            View::setSiteSetting('site_description', $description);
             foreach (['site_logo_upload' => 'site_logo', 'site_banner_upload' => 'site_banner', 'home_header_upload' => 'home_header_image'] as $field => $setting) {
                 $oldImage = View::siteSetting($setting);
                 if (isset($_POST['clear_' . $setting])) {
@@ -1466,6 +1524,7 @@ function page_admin(?array $user, string $method): void
     $commentCount = (int)DB::scalar('SELECT COUNT(*) FROM comments');
 
     $curName             = View::siteSetting('site_name', SITE_NAME);
+    $curDescription      = View::siteSetting('site_description', '');
     $curLogo             = View::siteSetting('site_logo');
     $curBanner           = View::siteSetting('site_banner');
     $curHomeHeaderImage  = View::siteSetting('home_header_image');
@@ -1524,6 +1583,7 @@ function page_admin(?array $user, string $method): void
     View::csrfField();
     echo '<input type="hidden" name="action" value="site_settings">';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Site name</span><input name="site_name" value="' . View::e($curName) . '" style="width:100%"></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>SEO description <small>(used by search engines and Discord)</small></span><textarea name="site_description" rows="3" maxlength="200" style="width:100%" placeholder="Describe the site in one concise sentence…">' . View::e($curDescription) . '</textarea></label>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Navbar logo <small>(saved locally)</small></span><input type="file" name="site_logo_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
     if ($curLogo) echo '<label><input type="checkbox" name="clear_site_logo"> Remove current navbar logo</label>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Navbar banner <small>(saved locally; used when no logo is set)</small></span><input type="file" name="site_banner_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';

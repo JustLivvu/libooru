@@ -11,6 +11,9 @@ define('DB_PATH',      DATA_DIR . '/libooru.db');
 // Site settings
 define('SITE_NAME',    'Libooru');
 define('SITE_BASE',    '');          // e.g. '/libooru' if not at root
+// Set LIBOORU_SITE_URL in production (for example https://example.com).
+// When empty, SEO URLs are derived from the current reverse-proxy request.
+define('SITE_URL',     rtrim((string)(getenv('LIBOORU_SITE_URL') ?: ''), '/'));
 define('POSTS_PER_PAGE', 20);
 define('THUMB_WIDTH',  450);
 define('THUMB_HEIGHT', 450);

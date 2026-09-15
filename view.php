@@ -17,6 +17,29 @@ class View
         return SITE_BASE . $path . $q;
     }
 
+    public static function absoluteUrl(string $url = '/'): string
+    {
+        if (preg_match('#^https?://#i', $url)) return $url;
+
+        $origin = SITE_URL;
+        if ($origin === '') {
+            $forwardedProto = trim(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]);
+            $scheme = in_array($forwardedProto, ['http', 'https'], true)
+                ? $forwardedProto
+                : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http');
+
+            $forwardedHost = trim(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? ''))[0]);
+            $host = $forwardedHost !== '' ? $forwardedHost : (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+            if (!preg_match('/^(?:\[[0-9a-f:]+\]|[a-z0-9.-]+)(?::\d+)?$/i', $host)) {
+                $host = 'localhost';
+            }
+            $origin = $scheme . '://' . $host;
+        }
+
+        $path = str_starts_with($url, '/') ? $url : '/' . $url;
+        return rtrim($origin, '/') . $path;
+    }
+
     // ── Site settings ─────────────────────────────────────────────────────────
 
     private static ?array $siteSettings = null;
@@ -47,13 +70,60 @@ class View
 
     // ── Layout ────────────────────────────────────────────────────────────────
 
-    public static function header(string $title, ?array $user = null, ?array $sidebarTags = null): void
+    public static function header(string $title, ?array $user = null, ?array $sidebarTags = null, array $meta = []): void
     {
         $siteName = self::siteSetting('site_name', SITE_NAME);
         $siteLogo = self::siteSetting('site_logo');
         $siteBanner = self::siteSetting('site_banner');
         $adultWarningEnabled = self::siteSetting('enable_adult_warning', '0') === '1';
         $e = fn($v) => self::e($v);
+
+        $fullTitle = ($title === $siteName || $title === SITE_NAME)
+            ? $siteName
+            : $title . ' - ' . $siteName;
+        $description = trim((string)($meta['description'] ?? self::siteSetting(
+            'site_description',
+            'Browse, search and discover media by tags, rating and quality on ' . $siteName . '.'
+        )));
+        if ($description === '') {
+            $description = 'Browse, search and discover media by tags, rating and quality on ' . $siteName . '.';
+        }
+        $description = preg_replace('/\s+/', ' ', $description) ?? $description;
+        $description = function_exists('mb_substr')
+            ? mb_substr($description, 0, 200) : substr($description, 0, 200);
+
+        $requestUri = (string)($_SERVER['REQUEST_URI'] ?? self::url('/'));
+        $canonical = self::absoluteUrl((string)($meta['canonical'] ?? $requestUri));
+        $type = (string)($meta['type'] ?? 'website');
+        $requestPath = (string)(parse_url($requestUri, PHP_URL_PATH) ?: '/');
+        $relativePath = SITE_BASE !== '' && str_starts_with($requestPath, SITE_BASE)
+            ? (substr($requestPath, strlen(SITE_BASE)) ?: '/')
+            : $requestPath;
+        $isPublicPage = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && http_response_code() < 400
+            && (bool)preg_match('#^/(?:$|posts$|tags$|terms$|post/\d+$)#', $relativePath);
+        $robots = (string)($meta['robots'] ?? ($isPublicPage ? 'index,follow,max-image-preview:large' : 'noindex,follow'));
+        $image = array_key_exists('image', $meta)
+            ? (string)$meta['image']
+            : (string)($siteBanner ?: $siteLogo ?: self::url('/static/favicon.png'));
+        if ($image !== '') $image = self::absoluteUrl($image);
+        $imageAlt = (string)($meta['image_alt'] ?? $fullTitle);
+        $themeColor = (string)($meta['theme_color'] ?? '#000000');
+
+        $jsonLd = $meta['json_ld'] ?? [
+            '@context' => 'https://schema.org',
+            '@type' => 'WebSite',
+            'name' => $siteName,
+            'url' => self::absoluteUrl(self::url('/')),
+            'description' => $description,
+        ];
+        $jsonLdJson = json_encode($jsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP);
+        $twitterCard = $image !== '' ? 'summary_large_image' : 'summary';
+        $imageMeta = '';
+        if ($image !== '') {
+            $imageMeta .= '<meta property="og:image" content="' . $e($image) . '">' . "\n";
+            $imageMeta .= '<meta property="og:image:alt" content="' . $e($imageAlt) . '">' . "\n";
+            $imageMeta .= '<meta name="twitter:image" content="' . $e($image) . '">' . "\n";
+        }
 
         // Logo / banner brand markup
         if ($siteLogo) {
@@ -70,7 +140,23 @@ class View
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{$e($title)} - {$e($siteName)}</title>
+<title>{$e($fullTitle)}</title>
+<meta name="description" content="{$e($description)}">
+<meta name="robots" content="{$e($robots)}">
+<meta name="rating" content="adult">
+<meta name="theme-color" content="{$e($themeColor)}">
+<link rel="canonical" href="{$e($canonical)}">
+<link rel="icon" type="image/png" href="{$e(SITE_BASE)}/static/favicon.png?v=1">
+<link rel="apple-touch-icon" href="{$e(SITE_BASE)}/static/favicon.png?v=1">
+<meta property="og:site_name" content="{$e($siteName)}">
+<meta property="og:title" content="{$e($fullTitle)}">
+<meta property="og:description" content="{$e($description)}">
+<meta property="og:type" content="{$e($type)}">
+<meta property="og:url" content="{$e($canonical)}">
+{$imageMeta}<meta name="twitter:card" content="{$e($twitterCard)}">
+<meta name="twitter:title" content="{$e($fullTitle)}">
+<meta name="twitter:description" content="{$e($description)}">
+<script type="application/ld+json">{$jsonLdJson}</script>
 <link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v=15">
 <script src="{$e(SITE_BASE)}/static/autocomplete.js" defer></script>
 </head>
