@@ -87,7 +87,7 @@ class DatabaseBackup
             self::client()->getObjectToFile($key, $restorePath);
             self::validateSnapshot($restorePath);
 
-            // Do not replace the live DB until a fresh remote safety copy exists.
+
             $preRollback = self::create('pre-rollback');
             DB::get()->exec('PRAGMA wal_checkpoint(TRUNCATE)');
             DB::close();

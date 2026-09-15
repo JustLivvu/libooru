@@ -8,28 +8,28 @@ require_once __DIR__ . '/image.php';
 require_once __DIR__ . '/post.php';
 require_once __DIR__ . '/view.php';
 
-/**
- * REST API — JSON, versioned at /api/v1/
- *
- * Authentication: pass API key via header X-API-Key or query param api_key.
- *
- * Endpoints:
- *   GET    /api/v1/posts          list posts (page, limit, tags, rating)
- *   GET    /api/v1/posts/{id}     single post with tags & comments
- *   POST   /api/v1/posts          upload (multipart: file, tags, rating, source, title)
- *   PUT    /api/v1/posts/{id}     update post (tags, rating, source, title)
- *   DELETE /api/v1/posts/{id}     delete post (admin or owner)
- *
- *   GET    /api/v1/tags           list tags (page, limit, q)
- *
- *   GET    /api/v1/comments/{postId}   list comments for post
- *   POST   /api/v1/comments/{postId}   add comment (authenticated; body)
- *   DELETE /api/v1/comments/{id}       delete comment (admin)
- *
- *   POST   /api/v1/votes/{postId}      vote (value: 1 or -1)
- *
- *   GET    /api/v1/users/me        current user info
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class Api
 {
     private ?array $authUser = null;
@@ -46,16 +46,16 @@ class Api
             exit;
         }
 
-        // Auth
+
         $key = $_SERVER['HTTP_X_API_KEY'] ?? $_GET['api_key'] ?? '';
         if ($key !== '') {
             $this->authUser = Auth::fromApiKey($key);
             if ($this->authUser) {
-                // Inject into Auth static state so Auth::id() works inside Post::upload().
+
                 Auth::setUser($this->authUser);
             }
         } elseif (Auth::current()) {
-            // Same-origin browser requests may authenticate with the PHP session.
+
             $this->authUser = Auth::current();
         }
 
@@ -75,51 +75,51 @@ class Api
 
     private function route(string $method, string $path): void
     {
-        // GET /posts
+
         if ($method === 'GET' && preg_match('#^/posts$#', $path)) {
             $this->getPosts();
         }
-        // GET /posts/{id}
+
         elseif ($method === 'GET' && preg_match('#^/posts/(\d+)$#', $path, $m)) {
             $this->getPost((int)$m[1]);
         }
-        // POST /posts
+
         elseif ($method === 'POST' && preg_match('#^/posts$#', $path)) {
             $this->createPost();
         }
-        // PUT /posts/{id}
+
         elseif ($method === 'PUT' && preg_match('#^/posts/(\d+)$#', $path, $m)) {
             $this->updatePost((int)$m[1]);
         }
-        // DELETE /posts/{id}
+
         elseif ($method === 'DELETE' && preg_match('#^/posts/(\d+)$#', $path, $m)) {
             $this->deletePost((int)$m[1]);
         }
-        // GET /tags/autocomplete
+
         elseif ($method === 'GET' && preg_match('#^/tags/autocomplete$#', $path)) {
             $this->tagsAutocomplete();
         }
-        // GET /tags
+
         elseif ($method === 'GET' && preg_match('#^/tags$#', $path)) {
             $this->getTags();
         }
-        // GET /comments/{postId}
+
         elseif ($method === 'GET' && preg_match('#^/comments/(\d+)$#', $path, $m)) {
             $this->getComments((int)$m[1]);
         }
-        // POST /comments/{postId}
+
         elseif ($method === 'POST' && preg_match('#^/comments/(\d+)$#', $path, $m)) {
             $this->addComment((int)$m[1]);
         }
-        // DELETE /comments/{id}
+
         elseif ($method === 'DELETE' && preg_match('#^/comments/(\d+)$#', $path, $m)) {
             $this->deleteComment((int)$m[1]);
         }
-        // POST /votes/{postId}
+
         elseif ($method === 'POST' && preg_match('#^/votes/(\d+)$#', $path, $m)) {
             $this->vote((int)$m[1]);
         }
-        // GET /users/me
+
         elseif ($method === 'GET' && preg_match('#^/users/me$#', $path)) {
             $this->me();
         }
@@ -128,7 +128,7 @@ class Api
         }
     }
 
-    // ---- posts ----
+
 
     private function getPosts(): void
     {
@@ -210,7 +210,7 @@ class Api
         echo json_encode(['ok' => true]);
     }
 
-    // ---- tags ----
+
 
     private function getTags(): void
     {
@@ -246,7 +246,7 @@ class Api
     private function tagsAutocomplete(): void
     {
         $this->requirePostReadAccess();
-        // Apply the current user blacklist.
+
         $q     = trim($_GET['q'] ?? '');
         $limit = min(10, max(1, (int)($_GET['limit'] ?? 8)));
 
@@ -269,7 +269,7 @@ class Api
             $notInParams = $blacklisted;
         }
 
-        // Match tags that START WITH the query first, then others
+
         $sql1 = 'SELECT name, count FROM tags
                  WHERE name LIKE ?' . $notInSql . '
                  ORDER BY (CASE WHEN name LIKE ? THEN 0 ELSE 1 END), count DESC
@@ -277,7 +277,7 @@ class Api
         $params1 = array_merge([$q . '%'], $notInParams, [$q . '%', $limit]);
         $tags = DB::rows($sql1, $params1);
 
-        // If not enough results, also look for tags containing the query anywhere
+
         if (count($tags) < $limit) {
             $found = array_column($tags, 'name');
             $sql2 = 'SELECT name, count FROM tags
@@ -292,7 +292,7 @@ class Api
         echo json_encode($tags);
     }
 
-    // ---- comments ----
+
 
     private function getComments(int $postId): void
     {
@@ -323,7 +323,7 @@ class Api
         echo json_encode(['ok' => true]);
     }
 
-    // ---- votes ----
+
 
     private function vote(int $postId): void
     {
@@ -335,7 +335,7 @@ class Api
         echo json_encode(['score' => $score]);
     }
 
-    // ---- me ----
+
 
     private function me(): void
     {
@@ -351,7 +351,7 @@ class Api
         ]);
     }
 
-    // ---- helpers ----
+
 
     private function requirePostReadAccess(): void
     {

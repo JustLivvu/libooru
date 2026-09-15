@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Pure PHP S3 Client using AWS Signature Version 4.
- * Compatible with AWS S3, MinIO, Cloudflare R2, Wasabi, DigitalOcean Spaces, Backblaze B2, etc.
- */
+
+
+
+
 class S3Client
 {
     private string $endpoint;
@@ -38,9 +38,9 @@ class S3Client
         $this->secretKey = $secretKey;
     }
 
-    /**
-     * Build full URL for a key.
-     */
+
+
+
     public function getUrl(string $key): string
     {
         $key = ltrim($key, '/');
@@ -50,8 +50,8 @@ class S3Client
             $port = parse_url($this->endpoint, PHP_URL_PORT);
             $portStr = $port ? ':' . $port : '';
 
-            // A virtual-hosted endpoint already contains the bucket name.
-            // In that form, adding it to the path produces an invalid request.
+
+
             if (str_starts_with(strtolower($host), strtolower($this->bucket) . '.')) {
                 return "{$scheme}://{$host}{$portStr}/{$key}";
             }
@@ -61,7 +61,7 @@ class S3Client
         return "{$this->endpoint}/{$key}";
     }
 
-    /** Create a time-limited, browser-usable GET URL without exposing the secret key. */
+
     public function getPresignedUrl(string $key, int $expires = 3600): string
     {
         $expires = max(1, min($expires, 604800));
@@ -112,9 +112,9 @@ class S3Client
         return "{$scheme}://{$host}{$path}?" . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
     }
 
-    /**
-     * Helper to make HTTP request using stream context (pure PHP fallback for cURL).
-     */
+
+
+
     private function httpRequest(string $method, string $url, array $headers, string $payload = '', int $timeout = 300): array
     {
         $headerLines = [];
@@ -145,10 +145,10 @@ class S3Client
         return ['code' => $httpCode, 'body' => $response !== false ? $response : ''];
     }
 
-    /**
-     * Upload a file or string to S3. Files are streamed by curl and never loaded
-     * into the PHP worker's memory.
-     */
+
+
+
+
     public function putObject(string $key, string $bodyOrPath, string $contentType = 'application/octet-stream', bool $isFile = false): bool
     {
         $key = ltrim($key, '/');
@@ -235,9 +235,9 @@ class S3Client
         return ' — ' . substr($detail, 0, 300);
     }
 
-    /**
-     * Delete an object from S3.
-     */
+
+
+
     public function deleteObject(string $key): bool
     {
         $key = ltrim($key, '/');
@@ -249,9 +249,9 @@ class S3Client
         return ($res['code'] >= 200 && $res['code'] < 300) || $res['code'] === 404;
     }
 
-    /**
-     * Fetch object content into string.
-     */
+
+
+
     public function getObject(string $key): ?string
     {
         $key = ltrim($key, '/');
@@ -266,7 +266,7 @@ class S3Client
 
         return null;
     }
-    /** Download an object to a local file without loading it into memory. */
+
     public function getObjectToFile(string $key, string $path): void
     {
         $key = ltrim($key, '/');
@@ -304,7 +304,7 @@ class S3Client
         }
     }
 
-    /** List objects below a prefix using S3 ListObjectsV2. */
+
     public function listObjects(string $prefix = ''): array
     {
         $objects = [];
@@ -344,9 +344,9 @@ class S3Client
     }
 
 
-    /**
-     * Stream object directly to client output.
-     */
+
+
+
     public function streamObject(string $key, bool $rateLimited = false): void
     {
         $key = ltrim($key, '/');
@@ -355,8 +355,8 @@ class S3Client
         $headers = $this->createSignedHeaders('GET', $url, '');
         $range = $_SERVER['HTTP_RANGE'] ?? '';
         if (preg_match('/^bytes=\d*-\d*$/', $range)) {
-            // Forward Safari's byte-range request to S3. The response headers
-            // are relayed below so the browser receives 206 Partial Content.
+
+
             $headers[] = 'Range: ' . $range;
         }
         $headerLines = implode("\r\n", $headers);
@@ -407,9 +407,9 @@ class S3Client
         }
     }
 
-    /**
-     * Create AWS SigV4 signed headers.
-     */
+
+
+
     private function createSignedHeaders(string $method, string $url, string $payload, string $contentType = ''): array
     {
         return $this->createSignedHeadersForHash($method, $url, hash('sha256', $payload), $contentType);

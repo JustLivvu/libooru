@@ -13,11 +13,11 @@ require_once __DIR__ . '/seo.php';
 require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/api.php';
 
-// ── Bootstrap ──────────────────────────────────────────────────────────────
+
 
 Auth::start();
 
-// Serve static files (thumb / full image)
+
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $base = SITE_BASE;
 
@@ -38,13 +38,13 @@ if (str_starts_with($uri, $base . '/site-assets/')) {
     exit;
 }
 
-// API
+
 if (str_starts_with($uri, $base . '/api/')) {
     (new Api())->handle();
     exit;
 }
 
-// ── Router ─────────────────────────────────────────────────────────────────
+
 
 class Router
 {
@@ -86,7 +86,7 @@ class Router
 
     public static function serveFile(string $dir, string $name): void
     {
-        // Security: no path traversal
+
         $name = basename($name);
         $path = $dir . '/' . $name;
         if (!is_file($path)) {
@@ -102,8 +102,8 @@ class Router
         header('Accept-Ranges: bytes');
         header('Cache-Control: public, max-age=31536000, immutable');
 
-        // Safari on iPhone/iPad requires byte-range responses to seek and play
-        // MP4 files served by PHP instead of directly by the web server.
+
+
         $range = $_SERVER['HTTP_RANGE'] ?? '';
         if (preg_match('/^bytes=(\d*)-(\d*)$/', $range, $matches)) {
             if ($matches[1] === '') {
@@ -174,11 +174,11 @@ function deleteLocalSiteImage(string $url): void
     }
 }
 
-// Parse path
+
 $path   = substr($uri, strlen($base)) ?: '/';
 $method = $_SERVER['REQUEST_METHOD'];
 
-// ── Dispatch ───────────────────────────────────────────────────────────────
+
 
 try {
     dispatch($method, $path);
@@ -189,13 +189,13 @@ try {
     View::footer();
 }
 
-// ── Controller functions ───────────────────────────────────────────────────
+
 
 function dispatch(string $method, string $path): void
 {
     $user = Auth::current();
 
-    // Search-engine discovery endpoints
+
     if ($path === '/robots.txt') {
         page_robots();
     }
@@ -208,15 +208,15 @@ function dispatch(string $method, string $path): void
     elseif (preg_match('#^/sitemap-posts-(\d+)\.xml$#', $path, $m)) {
         page_sitemap_posts((int)$m[1]);
     }
-    // Home
+
     elseif ($path === '/' || $path === '') {
         page_home($user);
     }
-    // Browse /posts
+
     elseif ($path === '/posts') {
         page_posts($user);
     }
-    // Single post
+
     elseif (preg_match('#^/post/(\d+)$#', $path, $m)) {
         if ($method === 'POST') {
             post_handle($user, (int)$m[1]);
@@ -224,68 +224,68 @@ function dispatch(string $method, string $path): void
             page_post($user, (int)$m[1]);
         }
     }
-    // Edit post
+
     elseif (preg_match('#^/post/(\d+)/edit$#', $path, $m)) {
         page_post_edit($user, (int)$m[1], $method);
     }
-    // Delete post
+
     elseif (preg_match('#^/post/(\d+)/delete$#', $path, $m) && $method === 'POST') {
         action_post_delete($user, (int)$m[1]);
     }
-    // Upload
+
     elseif ($path === '/upload') {
         page_upload($user, $method);
     }
-    // Favorites
+
     elseif ($path === '/favorites') {
         page_favorites($user);
     }
-    // Favorites Lucky Draw
+
     elseif ($path === '/favorites/lucky') {
         page_favorites_lucky($user);
     }
-    // Tags
+
     elseif ($path === '/tags') {
         page_tags($user);
     }
-    // Scraper
+
     elseif ($path === '/scraper') {
         page_scraper($user, $method);
     }
-    // Login
+
     elseif ($path === '/login') {
         page_login($user, $method);
     }
-    // Logout
+
     elseif ($path === '/logout') {
         Auth::logout();
         Router::redirect('/');
     }
-    // Register
+
     elseif ($path === '/register') {
         page_register($user, $method);
     }
-    // Terms of Service
+
     elseif ($path === '/terms') {
         page_terms($user);
     }
-    // User favorites
+
     elseif (preg_match('#^/user/([^/]+)/favorites$#', $path, $m)) {
         page_user_favorites($user, rawurldecode($m[1]));
     }
-    // User profile
+
     elseif (preg_match('#^/user/([^/]+)$#', $path, $m)) {
         page_user($user, rawurldecode($m[1]));
     }
-    // Admin
+
     elseif ($path === '/admin') {
         page_admin($user, $method);
     }
-    // Settings
+
     elseif ($path === '/settings') {
         page_settings($user, $method);
     }
-    // 404
+
     else {
         http_response_code(404);
         View::header('Not Found', $user);
@@ -294,7 +294,7 @@ function dispatch(string $method, string $path): void
     }
 }
 
-// ── Pages ──────────────────────────────────────────────────────────────────
+
 
 function page_home(?array $user): void
 {
@@ -305,7 +305,7 @@ function page_home(?array $user): void
         $counterHtml .= '<img src="https://xbooru.com/counter/' . $digit . '.gif" alt="' . $digit . '" class="counter-mascot">';
     }
 
-    // Visitor counter
+
     $visitors = (int)View::siteSetting('visitor_count', '360459064');
     $visitors++;
     View::setSiteSetting('visitor_count', (string)$visitors);
@@ -317,20 +317,20 @@ function page_home(?array $user): void
             ?: 'Browse and discover thousands of tagged images and videos by rating and quality on ' . View::siteSetting('site_name', SITE_NAME) . '.',
     ]);
     View::flash();
-    
+
     $siteName = View::siteSetting('site_name', SITE_NAME);
     $e = fn($v) => View::e($v);
 
     echo '<div class="gelbooru-home">';
-    
+
     $homeHeaderImage = View::siteSetting('home_header_image');
     if ($homeHeaderImage) {
         echo '  <img class="gelbooru-home-header" src="' . $e($homeHeaderImage) . '" alt="' . $e($siteName) . '">';
     } else {
         echo '  <h1 class="gelbooru-title">' . $e($siteName) . '</h1>';
     }
-    
-    // Sub-navigation
+
+
     echo '  <div class="gelbooru-subnav">';
     echo '    <a href="' . View::url('/posts') . '">Browse Posts</a>';
     echo '    <a href="' . View::url('/upload') . '">Upload</a>';
@@ -348,28 +348,28 @@ function page_home(?array $user): void
         echo '    <a href="' . View::url('/register') . '">Register</a>';
     }
     echo '  </div>';
-    
-    // Search Form
+
+
     echo '  <form class="gelbooru-search-form" method="get" action="' . View::url('/posts') . '">';
     echo '    <input type="text" name="q" placeholder="Ex: blue_sky cloud 1girl" autocomplete="off" autofocus class="gelbooru-search-input">';
     echo '    <button type="submit" class="gelbooru-search-button">Search</button>';
     echo '  </form>';
-    
-    // Info Links
+
+
     $postCount = (int)DB::scalar('SELECT COUNT(*) FROM posts');
     echo '  <div class="gelbooru-info-links">';
     echo '    <span>Serving ' . number_format($postCount) . ' posts</span>';
     echo '    - ';
     echo '    <span>Running Libooru closed source software</span>';
     echo '  </div>';
-    
-    // Counter Container
+
+
     echo '  <div class="gelbooru-counter-wrapper">';
     echo '    <div class="digit-counter">' . $counterHtml . '</div>';
     echo '  </div>';
-    
 
-    
+
+
     echo '</div>';
 
     View::footer();
@@ -455,8 +455,8 @@ function page_post(?array $user, int $id): void
     }
     $comments = Post::commentsFor($id);
     $tags     = $post['tags'];
-    // Try to get counts for these tags if possible, or just pass as is
-    // Actually $post['tags'] already has 'name'. View::sidebar handles missing 'count'.
+
+
 
     $fileUrl = Image::fileUrl($post['filename']);
     $thumbUrl = Image::thumbUrl($post['filename']);
@@ -511,7 +511,7 @@ function page_post(?array $user, int $id): void
     }
     echo '</div>';
 
-    // Info
+
     echo '<dl class="post-info">';
     echo '<dt>Rating</dt><dd>' . View::e(match($post['rating']) {'s' => 'Safe', 'q' => 'Questionable', 'e' => 'Explicit', default => $post['rating']}) . '</dd>';
     echo '<dt>Score</dt><dd>' . View::e($post['score']);
@@ -535,9 +535,9 @@ function page_post(?array $user, int $id): void
     echo '<dt>Date</dt><dd>' . date('Y-m-d H:i', (int)$post['created_at']) . '</dd>';
     echo '</dl>';
 
-    // Tags are in the sidebar
 
-    // Actions
+
+
     echo '<div class="post-actions">';
     if ($user) {
         $isFav = Post::isFavorite($id, (int)$user['id']);
@@ -575,7 +575,7 @@ function page_post(?array $user, int $id): void
 
     echo '</article>';
 
-    // Comments
+
     echo '<section class="comments">';
     echo '<h2>Comments (' . count($comments) . ')</h2>';
     foreach ($comments as $c) {
@@ -1037,11 +1037,11 @@ function page_favorites_lucky(?array $user): void
     $fileUrl = Image::fileUrl($post['filename']);
     $nextUrl = View::url('/favorites/lucky');
     $backUrl = View::url('/favorites');
-    
+
     $ext = pathinfo($post['filename'], PATHINFO_EXTENSION);
     $isVideo = in_array(strtolower($ext), ['mp4', 'webm'], true);
 
-    // We render a simple fullscreen page
+
     echo '<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1057,7 +1057,7 @@ function page_favorites_lucky(?array $user): void
 </head>
 <body>
     ';
-    
+
     if ($isVideo) {
         echo '<video src="' . htmlspecialchars($fileUrl) . '" autoplay loop controls playsinline preload="metadata"></video>';
     } else {
@@ -1089,20 +1089,20 @@ function page_scraper(?array $user, string $method): void
     if ($method === 'POST') {
         View::verifyCsrf();
         $action = $_POST['action'] ?? '';
-        
+
         if ($action === 'start') {
             $tag = trim($_POST['tag'] ?? '');
             if ($tag !== '') {
                 $script = __DIR__ . '/scrapers/realbooru.php';
-                
+
                 DB::exec('INSERT INTO scraper_tasks (tag, status) VALUES (?, ?)', [$tag, 'starting']);
                 $taskId = (int)DB::lastId();
                 $logFile = __DIR__ . '/data/scraper_' . $taskId . '.log';
-                
-                // Launch in background and get PID
+
+
                 $cmd = sprintf(
-                    'php %s --tag %s --task-id %d > %s 2>&1 & echo $!', 
-                    escapeshellarg($script), 
+                    'php %s --tag %s --task-id %d > %s 2>&1 & echo $!',
+                    escapeshellarg($script),
                     escapeshellarg($tag),
                     $taskId,
                     escapeshellarg($logFile)
@@ -1149,13 +1149,13 @@ function page_scraper(?array $user, string $method): void
     }
 
     $tasks = DB::rows('SELECT * FROM scraper_tasks ORDER BY created_at DESC LIMIT 50');
-    
-    // Update status for running tasks
+
+
     foreach ($tasks as &$task) {
         if ($task['status'] === 'running' && $task['pid'] > 0) {
-            // A numeric PID alone is not reliable: after the scraper exits the
-            // operating system may reuse it for an unrelated process.  Confirm
-            // that it is still this exact PHP scraper task.
+
+
+
             $cmdline = @file_get_contents('/proc/' . (int)$task['pid'] . '/cmdline');
             $expectedTaskArg = "\0--task-id\0" . (int)$task['id'] . "\0";
             $isRunning = is_string($cmdline)
@@ -1171,9 +1171,9 @@ function page_scraper(?array $user, string $method): void
 
     View::header('Scraper', $user);
     View::flash();
-    
+
     echo '<h1>Scraper Management</h1>';
-    
+
     echo '<div class="form-container">';
     echo '<h2>Start New Scraper</h2>';
     echo '<form method="post" action="' . View::url('/scraper') . '">';
@@ -1204,7 +1204,7 @@ function page_scraper(?array $user, string $method): void
         echo '  <input type="hidden" name="action" value="clean">';
         echo '  <button type="submit" class="button">Clean Completed</button>';
         echo '</form>';
-        
+
         echo '<table class="data-table">';
         echo '<tr><th>ID</th><th>Tag</th><th>PID</th><th>Status</th><th>Started</th><th>Action</th></tr>';
         foreach ($tasks as $t) {
@@ -1234,8 +1234,8 @@ function page_scraper(?array $user, string $method): void
             echo 'Log file not found or empty.';
         }
         echo '</div>';
-        
-        // Auto-scroll to bottom of log div
+
+
         echo '<script>
             var logDiv = document.querySelector("#log").nextElementSibling;
             logDiv.scrollTop = logDiv.scrollHeight;
@@ -1557,7 +1557,7 @@ function page_admin(?array $user, string $method): void
     View::flash();
     echo '<h1>Panel</h1>';
 
-    // Stats
+
     if (Auth::can('access_admin_panel', $user)) {
     echo '<details class="admin-section"' . ($openSection === 'statistics' ? ' open' : '') . '>';
     echo '<summary>Statistics</summary>';
@@ -1573,7 +1573,7 @@ function page_admin(?array $user, string $method): void
     echo '</div></details>';
     }
 
-    // Site settings
+
     if (Auth::can('manage_site_settings', $user)) {
     echo '<details class="admin-section"' . ($openSection === 'site-settings' ? ' open' : '') . '>';
     echo '<summary>Site Settings</summary>';
@@ -1597,7 +1597,7 @@ function page_admin(?array $user, string $method): void
     echo '</div></details>';
     }
 
-    // Storage settings
+
     if (Auth::can('manage_storage_settings', $user)) {
     $isLocal = $curStorageDriver === 'local';
     $isS3    = $curStorageDriver === 's3';
@@ -1613,8 +1613,8 @@ function page_admin(?array $user, string $method): void
         foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(__DIR__ . '/data/thumbs', FilesystemIterator::SKIP_DOTS)) as $file) { $totalBytes += $file->getSize(); }
     }
     $gbTaken = number_format($totalBytes / (1024 * 1024 * 1024), 2);
-    
-    // Calculate S3 estimated storage based on DB file sizes + ~50KB per thumbnail
+
+
     $s3BytesEstimate = (int)DB::scalar('SELECT SUM(filesize) FROM posts') + ($postCount * 51200);
     $s3GbTaken = number_format($s3BytesEstimate / (1024 * 1024 * 1024), 2);
 
@@ -1646,7 +1646,7 @@ function page_admin(?array $user, string $method): void
     echo '</div></details>';
     }
 
-    // Database backups
+
     if (Auth::can('manage_database_backups', $user)) {
         echo '<details class="admin-section"' . ($openSection === 'database-backups' ? ' open' : '') . '>';
         echo '<summary>Database backups <span class="admin-section-count">' . count($databaseBackups) . '</span></summary>';
@@ -1701,7 +1701,7 @@ function page_admin(?array $user, string $method): void
         echo '</div></details>';
     }
 
-    // Registrations & Content settings
+
     if (Auth::can('manage_registration_settings', $user)) {
     $curDisableReg = View::siteSetting('disable_registrations', '0');
     $curRequireRegistrationReason = View::siteSetting('require_registration_reason', '0');
@@ -1749,7 +1749,7 @@ function page_admin(?array $user, string $method): void
     echo '</div></details>';
     }
 
-    // Post reports
+
     if (Auth::can('manage_post_reports', $user)) {
         echo '<details class="admin-section"' . ($openSection === 'post-reports' ? ' open' : '') . '>';
         echo '<summary>Post reports <span class="admin-section-count">' . $pendingPostReportCount . ' pending</span></summary>';
@@ -1789,7 +1789,7 @@ function page_admin(?array $user, string $method): void
         echo '</div></details>';
     }
 
-    // Registration requests
+
     if (Auth::can('manage_registration_requests', $user)) {
     echo '<details class="admin-section"' . ($openSection === 'registration-requests' ? ' open' : '') . '>';
     echo '<summary>Registration requests <span class="admin-section-count">' . count($registrationRequests) . '</span></summary>';
@@ -1817,7 +1817,7 @@ function page_admin(?array $user, string $method): void
     echo '</div></details>';
     }
 
-    // Roles
+
     if (Auth::can('manage_roles', $user)) {
         echo '<details class="admin-section"' . ($openSection === 'roles' ? ' open' : '') . '>';
         echo '<summary>Roles <span class="admin-section-count">' . count($roles) . '</span></summary>';
@@ -1873,7 +1873,7 @@ function page_admin(?array $user, string $method): void
         echo '</div></details>';
     }
 
-    // Users table
+
     if (Auth::can('manage_users', $user) || Auth::can('manage_roles', $user)) {
     echo '<details class="admin-section"' . ($openSection === 'users' ? ' open' : '') . '>';
     echo '<summary>Users <span class="admin-section-count">' . count($users) . '</span></summary>';
@@ -1892,7 +1892,7 @@ function page_admin(?array $user, string $method): void
         echo '<td>' . View::e($roleNames[$u['role']] ?? $u['role']) . '</td>';
         if (Auth::can('manage_users', $user)) echo '<td><code style="font-size:11px">' . View::e($u['api_key']) . '</code></td>';
         echo '<td style="white-space:nowrap">';
-        // Change role
+
         if (Auth::can('manage_roles', $user) && (int)$u['id'] !== (int)$user['id']) {
             echo '<form method="post" style="display:inline">';
             View::csrfField();
@@ -1906,7 +1906,7 @@ function page_admin(?array $user, string $method): void
             echo '</select> <button>Set</button>';
             echo '</form> ';
         }
-        // Regen API key
+
         if (Auth::can('manage_users', $user)) {
             echo '<form method="post" style="display:inline">';
             View::csrfField();
@@ -1915,7 +1915,7 @@ function page_admin(?array $user, string $method): void
             echo '<button>Regen API</button>';
             echo '</form> ';
         }
-        // Delete
+
         if (Auth::can('manage_users', $user) && (int)$u['id'] !== (int)$user['id']) {
             echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Delete user ' . View::e($u['name']) . '?\')">';
             View::csrfField();
@@ -1933,7 +1933,7 @@ function page_admin(?array $user, string $method): void
     View::footer();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 function page_settings(?array $user, string $method): void
 {
@@ -1968,7 +1968,7 @@ function page_settings(?array $user, string $method): void
         } elseif ($action === 'regen_api') {
             $key = bin2hex(random_bytes(16));
             DB::exec('UPDATE users SET api_key = ? WHERE id = ?', [$key, (int)$user['id']]);
-            $apiKey = $key; // show once
+            $apiKey = $key;
             View::setFlash('API key regenerated. Copy it now — it will not be shown again.', 'ok');
 
         } elseif ($action === 'delete_api') {
@@ -1984,7 +1984,7 @@ function page_settings(?array $user, string $method): void
         }
     }
 
-    // Refresh user
+
     $user = DB::row('SELECT * FROM users WHERE id = ?', [(int)$user['id']]);
     $hasKey = !empty($user['api_key']);
 
@@ -1994,7 +1994,7 @@ function page_settings(?array $user, string $method): void
 
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
 
-    // Tag Blacklist
+
     echo '<h2>Tag Blacklist</h2>';
     echo '<p style="color:var(--muted-text);font-size:12px">Tags listed here will be hidden from top tags in the left sidebar.</p>';
     echo '<form method="post" style="max-width:400px">';
@@ -2005,7 +2005,7 @@ function page_settings(?array $user, string $method): void
     echo '<button>Save Blacklist</button>';
     echo '</form>';
 
-    // Change password
+
     echo '<h2 style="margin-top:30px">Change Password</h2>';
     echo '<form method="post" style="max-width:400px">';
     View::csrfField();
@@ -2016,11 +2016,11 @@ function page_settings(?array $user, string $method): void
     echo '<button>Change Password</button>';
     echo '</form>';
 
-    // API Key
+
     echo '<h2 style="margin-top:30px">API Key</h2>';
 
     if ($apiKey !== null) {
-        // Just regenerated — show once
+
         echo '<p class="flash flash-ok" style="font-family:monospace;word-break:break-all">' . View::e($apiKey) . '</p>';
         echo '<p style="color:var(--muted-text);font-size:12px">This is the only time this key will be shown. Copy it now.</p>';
     }
@@ -2033,14 +2033,14 @@ function page_settings(?array $user, string $method): void
 
     echo '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">';
 
-    // Regen
+
     echo '<form method="post">';
     View::csrfField();
     echo '<input type="hidden" name="action" value="regen_api">';
     echo '<button>' . ($hasKey ? 'Reset API Key' : 'Generate API Key') . '</button>';
     echo '</form>';
 
-    // Delete
+
     if ($hasKey) {
         echo '<form method="post" onsubmit="return confirm(\'Delete your API key? Importers using it will stop working.\')">';
         View::csrfField();

@@ -7,12 +7,12 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/image.php';
 require_once __DIR__ . '/storage.php';
 
-/**
- * Post model: CRUD, tag management, upload.
- */
+
+
+
 class Post
 {
-    // -------- fetch --------
+
 
     public static function getById(int $id): ?array
     {
@@ -54,7 +54,7 @@ class Post
         }
 
         if ($tagFilter) {
-            // Intersection: posts that have ALL given tags
+
             $placeholders = implode(',', array_fill(0, count($tagFilter), '?'));
             $qualityAnd   = $validQuality ? "AND p.quality = ?" : '';
             $ratingAnd    = $rating ? "AND p.rating = ?" : '';
@@ -124,7 +124,7 @@ class Post
         return ['posts' => $posts, 'total' => $total, 'pages' => (int)ceil($total / $perPage)];
     }
 
-    /** List posts for a profile while respecting the current viewer's blacklist. */
+
     public static function listByUser(int $userId, int $page, int $perPage): array
     {
         $offset = max(0, $page - 1) * $perPage;
@@ -151,7 +151,7 @@ class Post
         return ['posts' => $posts, 'total' => $total, 'pages' => (int)ceil($total / $perPage)];
     }
 
-    // -------- tags --------
+
 
     public static function tagsFor(int $postId): array
     {
@@ -166,7 +166,7 @@ class Post
 
     public static function setTags(int $postId, array $tagNames): void
     {
-        // Remove old tags — update counts
+
         $old = DB::rows(
             'SELECT t.id FROM tags t INNER JOIN post_tags pt ON pt.tag_id = t.id WHERE pt.post_id = ?',
             [$postId]
@@ -176,7 +176,7 @@ class Post
             DB::exec('UPDATE tags SET count = MAX(0, count - 1) WHERE id = ?', [$row['id']]);
         }
 
-        // Clean & deduplicate tag names
+
         $tagNames = array_unique(array_filter(array_map(
             fn($t) => strtolower(preg_replace('/\s+/', '_', trim($t))),
             $tagNames
@@ -184,7 +184,7 @@ class Post
 
         foreach ($tagNames as $name) {
             if ($name === '') continue;
-            // Upsert tag
+
             DB::exec('INSERT OR IGNORE INTO tags (name) VALUES (?)', [$name]);
             $tagId = (int)DB::scalar('SELECT id FROM tags WHERE name = ?', [$name]);
             DB::exec('INSERT OR IGNORE INTO post_tags (post_id, tag_id) VALUES (?, ?)', [$postId, $tagId]);
@@ -192,12 +192,12 @@ class Post
         }
     }
 
-    // -------- upload --------
 
-    /**
-     * Handle upload from $_FILES['file'].
-     * Returns ['id' => int] on success or throws RuntimeException.
-     */
+
+
+
+
+
     public static function upload(array $file, array $meta): int
     {
         if ($file['error'] !== UPLOAD_ERR_OK) {
@@ -207,7 +207,7 @@ class Post
             throw new RuntimeException('File too large (max ' . (MAX_FILE_SIZE / 1024 / 1024) . ' MB).');
         }
 
-        // Detect real MIME type from file content
+
         $finfo = new finfo(FILEINFO_MIME_TYPE);
         $mime  = $finfo->file($file['tmp_name']);
         if (!isset(ALLOWED_TYPES[$mime])) {
@@ -221,7 +221,7 @@ class Post
         $md5 = md5_file($file['tmp_name']);
         if (!$md5) throw new RuntimeException('Failed to hash file.');
 
-        // Check duplicate
+
         $existing = DB::scalar('SELECT id FROM posts WHERE md5 = ?', [$md5]);
         if ($existing) {
             throw new RuntimeException('Duplicate image (post #' . $existing . ' already exists).', 409);
@@ -235,7 +235,7 @@ class Post
         }
         $quality = self::determineQuality($w ?: null, $h ?: null);
 
-        // Make temporary thumbnail locally
+
         $tempThumbDir = sys_get_temp_dir();
         $thumbFilename = in_array(strtolower($ext), ['mp4', 'webm'], true)
             ? $md5 . '.jpg'
@@ -247,7 +247,7 @@ class Post
             throw new RuntimeException('Failed to generate thumbnail.');
         }
 
-        // Store media & thumbnail using Storage layer
+
         Storage::putMedia($filename, $file['tmp_name'], $tempThumbPath, $mime, $thumbMime);
 
         $userId = Auth::id();
@@ -301,9 +301,9 @@ class Post
     {
         $post = DB::row('SELECT filename FROM posts WHERE id = ?', [$id]);
         if (!$post) return;
-        // Remove files
+
         Storage::deleteMedia($post['filename']);
-        // Remove tags count
+
         $tags = DB::rows(
             'SELECT t.id FROM tags t INNER JOIN post_tags pt ON pt.tag_id = t.id WHERE pt.post_id = ?',
             [$id]
@@ -315,7 +315,7 @@ class Post
         DB::exec('DELETE FROM posts WHERE id = ?', [$id]);
     }
 
-    // -------- comments --------
+
 
     public static function addComment(int $postId, string $body, ?int $userId): int
     {
@@ -355,7 +355,7 @@ class Post
         DB::exec('DELETE FROM comments WHERE id = ?', [$commentId]);
     }
 
-    // -------- vote --------
+
 
     public static function vote(int $postId, int $userId, int $value): void
     {
@@ -376,7 +376,7 @@ class Post
         DB::exec('UPDATE posts SET score = ? WHERE id = ?', [$score, $postId]);
     }
 
-    // -------- reports --------
+
 
     public static function report(int $postId, int $userId, string $reason): void
     {
@@ -408,7 +408,7 @@ class Post
     {
         return (bool)DB::scalar("SELECT id FROM post_reports WHERE post_id = ? AND reporter_user_id = ? AND status = 'pending'", [$postId, $userId]);
     }
-    // -------- favorites --------
+
 
     public static function addFavorite(int $postId, int $userId): void
     {
@@ -479,7 +479,7 @@ class Post
         return DB::row($sql, [$userId]) ?: null;
     }
 
-    // -------- search helpers --------
+
 
     public static function popularTags(int $limit = 20): array
     {
@@ -489,7 +489,7 @@ class Post
         );
     }
 
-    // -------- misc --------
+
 
     private static function uploadError(int $code): string
     {

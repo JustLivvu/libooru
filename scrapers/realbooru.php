@@ -44,15 +44,15 @@ $downloaded = 0;
 $skipped = 0;
 $errors = 0;
 
-// Set user for Auth
+
 $user = DB::row("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1");
 if (!$user) {
     die("No admin user found.\n");
 }
 Auth::setUser($user);
 
-// Durable per-tag progress lives in SQLite, not in a page-cache file.  It
-// prevents a restarted task from walking thousands of already handled pages.
+
+
 $progressSource = 'realbooru_oldest_first';
 DB::exec(
     'CREATE TABLE IF NOT EXISTS scraper_progress (
@@ -72,8 +72,8 @@ if ($page > 0) {
     logMsg("Continuing at pid=$page.");
 }
 
-// Avoid one SQL query for every already imported post.  This is especially
-// important after a restart, when a tag can have thousands of older results.
+
+
 $knownRealbooruIds = [];
 foreach (DB::rows("SELECT id, title FROM posts WHERE title LIKE 'Realbooru #%'") as $post) {
     if (preg_match('/^Realbooru #(\d+)$/', (string)$post['title'], $match)) {
@@ -83,12 +83,12 @@ foreach (DB::rows("SELECT id, title FROM posts WHERE title LIKE 'Realbooru #%'")
 logMsg("Loaded " . count($knownRealbooruIds) . " existing Realbooru post IDs.");
 
 while (true) {
-    // Realbooru's search modifier sorts by ascending ID, which is the site's
-    // chronological order: oldest post first, newest post last.
+
+
     $searchTags = $tag . ' sort:id:asc';
     $url = "https://realbooru.com/index.php?page=post&s=list&tags=" . urlencode($searchTags) . "&pid=" . $page;
     logMsg("Fetching page list (pid=$page)...");
-    
+
     $opts = [
         "http" => [
             "header" => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\nReferer: https://realbooru.com/\r\n",
@@ -96,27 +96,27 @@ while (true) {
         ]
     ];
     $context = stream_context_create($opts);
-    
+
     $html = @file_get_contents($url, false, $context);
     if (!$html) {
         logMsg("Failed to fetch list page or reached end.");
         break;
     }
-    
+
     if (!preg_match_all('/page=post&(?:amp;)?s=view&(?:amp;)?id=(\d+)/', $html, $matches)) {
         logMsg("No more posts found on list page.");
         break;
     }
-    
+
     $postIds = array_unique($matches[1]);
     if (empty($postIds)) {
         logMsg("No posts found.");
         break;
     }
-    
+
     foreach ($postIds as $realbooruId) {
         logMsg("Processing Realbooru #$realbooruId...");
-        
+
         if (isset($knownRealbooruIds[$realbooruId])) {
             logMsg("  Skipped: Post #$realbooruId already in DB (Post #{$knownRealbooruIds[$realbooruId]}).");
             $skipped++;
@@ -130,7 +130,7 @@ while (true) {
             $errors++;
             continue;
         }
-        
+
         $imgUrl = '';
         if (preg_match('/id=[\"\']image[\"\'][^>]+src=[\"\']([^\"\']+)[\"\']/i', $viewHtml, $m) ||
             preg_match('/src=[\"\']([^\"\']+)[\"\'][^>]+id=[\"\']image[\"\']/i', $viewHtml, $m) ||
@@ -138,21 +138,21 @@ while (true) {
             preg_match('/<video\s+[^>]*src=[\"\']([^\"\']+)[\"\']/i', $viewHtml, $m)) {
             $imgUrl = $m[1];
         }
-        
+
         if (!$imgUrl) {
             logMsg("  Error: Could not find image/video URL for #$realbooruId");
             $errors++;
             continue;
         }
-        
+
         if (strpos($imgUrl, '//') === 0) {
             $imgUrl = 'https:' . $imgUrl;
         } elseif (strpos($imgUrl, '/') === 0) {
             $imgUrl = 'https://realbooru.com' . $imgUrl;
         }
-        
+
         $imgUrl = preg_replace('#^(https?://realbooru\.com)/+#', '$1/', $imgUrl);
-        
+
         $tmpFile = tempnam(sys_get_temp_dir(), 'rb_');
         logMsg("  Downloading media for #$realbooruId...");
         if (!downloadToFile($imgUrl, $tmpFile, $context)) {
@@ -161,9 +161,9 @@ while (true) {
             @unlink($tmpFile);
             continue;
         }
-        
+
         $md5 = md5_file($tmpFile);
-        
+
         $exists = DB::scalar('SELECT id FROM posts WHERE md5 = ?', [$md5]);
         if ($exists) {
             logMsg("  Skipped: MD5 $md5 already in DB (Post #$exists).");
@@ -171,7 +171,7 @@ while (true) {
             @unlink($tmpFile);
             continue;
         }
-        
+
         $tags = [];
         if (preg_match_all('/<a class=[\"\'](?:tag-type-[^\"\']+|model)[\"\'] href=[\"\'][^\"\']*tags=([^\"\'&>]+)/i', $viewHtml, $m)) {
             foreach ($m[1] as $t) {
@@ -180,7 +180,7 @@ while (true) {
         }
         $tags[] = 'realbooru';
         $tagStr = implode(' ', array_unique($tags));
-        
+
         $rating = 'q';
         if (preg_match('/Rating:\s*([A-Za-z]+)/i', $viewHtml, $m)) {
             $rStr = strtolower($m[1]);
@@ -188,14 +188,14 @@ while (true) {
             elseif (strpos($rStr, 'explicit') !== false) $rating = 'e';
             elseif (strpos($rStr, 'questionable') !== false) $rating = 'q';
         }
-        
+
         $meta = [
             'rating' => $rating,
             'source' => $viewUrl,
             'title'  => "Realbooru #" . $realbooruId,
             'tags'   => $tagStr,
         ];
-        
+
         $file = [
             'name'     => basename(parse_url($imgUrl, PHP_URL_PATH)),
             'type'     => mime_content_type($tmpFile),
@@ -203,7 +203,7 @@ while (true) {
             'error'    => UPLOAD_ERR_OK,
             'size'     => filesize($tmpFile),
         ];
-        
+
         try {
             $postId = Post::upload($file, $meta);
             $knownRealbooruIds[$realbooruId] = $postId;
@@ -213,10 +213,10 @@ while (true) {
             logMsg("  Error: " . $e->getMessage());
             $errors++;
         }
-        
+
         @unlink($tmpFile);
     }
-    
+
     $page += 42;
     DB::exec(
         'INSERT INTO scraper_progress (source, tag, next_pid, updated_at)

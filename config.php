@@ -8,17 +8,17 @@ define('THUMB_DIR',    DATA_DIR . '/thumbs');
 define('SITE_ASSET_DIR', DATA_DIR . '/site-assets');
 define('DB_PATH',      DATA_DIR . '/libooru.db');
 
-// Site settings
+
 define('SITE_NAME',    'Libooru');
-define('SITE_BASE',    '');          // e.g. '/libooru' if not at root
-// Set LIBOORU_SITE_URL in production (for example https://example.com).
-// When empty, SEO URLs are derived from the current reverse-proxy request.
+define('SITE_BASE',    '');
+
+
 define('SITE_URL',     rtrim((string)(getenv('LIBOORU_SITE_URL') ?: ''), '/'));
 define('POSTS_PER_PAGE', 20);
 define('THUMB_WIDTH',  450);
 define('THUMB_HEIGHT', 450);
 
-// Allowed MIME types  =>  extension
+
 const ALLOWED_TYPES = [
     'image/jpeg' => 'jpg',
     'image/png'  => 'png',
@@ -29,27 +29,27 @@ const ALLOWED_TYPES = [
     'video/webm' => 'webm',
 ];
 
-// Resource limits — keep php.ini/client_max_body_size in sync with MAX_FILE_SIZE.
-define('MAX_FILE_SIZE', 100 * 1024 * 1024); // 100 MB
+
+define('MAX_FILE_SIZE', 100 * 1024 * 1024);
 define('MAX_MEDIA_PIXELS', 20_000_000);
 define('MEDIA_PROCESS_TIMEOUT', 30);
 
-// Video delivery: allow a small startup/seek burst, then cap one PHP
-// response at 2.5 MiB/s (about 21 Mbps). Four viewers stay below a 100 Mbps uplink.
+
+
 define('VIDEO_RATE_LIMIT_AFTER', 2 * 1024 * 1024);
 define('VIDEO_RATE_LIMIT', 2560 * 1024);
 define('S3_VIDEO_URL_TTL', 3600);
 define('S3_THUMB_URL_TTL', 3600);
 
-// Comment abuse protection.
-define('MAX_COMMENT_LENGTH', 4_000); // bytes
+
+define('MAX_COMMENT_LENGTH', 4_000);
 define('COMMENT_RATE_LIMIT', 10);
-define('COMMENT_RATE_WINDOW', 60); // seconds
+define('COMMENT_RATE_WINDOW', 60);
 
-// Post report abuse protection.
-define('MAX_POST_REPORT_LENGTH', 1_000); // bytes
+
+define('MAX_POST_REPORT_LENGTH', 1_000);
 define('POST_REPORT_RATE_LIMIT', 5);
-define('POST_REPORT_RATE_WINDOW', 3600); // seconds
+define('POST_REPORT_RATE_WINDOW', 3600);
 
-// API key header
+
 define('API_KEY_HEADER', 'X-API-Key');

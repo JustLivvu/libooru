@@ -1,25 +1,22 @@
-/* ─────────────────────────────────────────────────────────────────────────────
-   LIBOORU - Minimalist & Modern UI Stylesheet
-   No Gradients, No Neon Colors. Pure, clean, high-UX media gallery.
-   ───────────────────────────────────────────────────────────────────────────── */
+
 
 :root {
   --bg-main: #09090b;
   --bg-card: #18181b;
   --bg-elevated: #27272a;
   --bg-input: #18181b;
-  
+
   --text-main: #f4f4f5;
   --text-muted: #a1a1aa;
   --text-dim: #71717a;
-  
+
   --border-color: #27272a;
   --border-hover: #3f3f46;
-  
+
   --accent: #e4e4e7;
   --accent-hover: #ffffff;
   --accent-bg: #27272a;
-  
+
   --tag-general: #38bdf8;
   --tag-artist: #f87171;
   --tag-copyright: #c084fc;
@@ -41,18 +38,18 @@
     --bg-card: #ffffff;
     --bg-elevated: #f4f4f5;
     --bg-input: #ffffff;
-    
+
     --text-main: #09090b;
     --text-muted: #71717a;
     --text-dim: #a1a1aa;
-    
+
     --border-color: #e4e4e7;
     --border-hover: #d4d4d8;
-    
+
     --accent: #18181b;
     --accent-hover: #000000;
     --accent-bg: #e4e4e7;
-    
+
     --tag-general: #0284c7;
     --tag-artist: #dc2626;
     --tag-copyright: #9333ea;
@@ -147,7 +144,7 @@ a:hover {
   color: var(--tag-general);
 }
 
-/* ── Header Navigation ─────────────────────────────────────────────────────── */
+
 header {
   position: sticky;
   top: 0;
@@ -194,7 +191,7 @@ header nav a:first-child:hover {
   opacity: 0.85;
 }
 
-/* ── Layout & Container ───────────────────────────────────────────────────── */
+
 #container {
   display: flex;
   max-width: 1600px;
@@ -213,7 +210,7 @@ main.full-width {
   width: 100%;
 }
 
-/* ── Sidebar ───────────────────────────────────────────────────────────────── */
+
 #sidebar {
   width: 220px;
   flex-shrink: 0;
@@ -301,7 +298,7 @@ main.full-width {
   flex-shrink: 0;
 }
 
-/* ── Typography & Headings ────────────────────────────────────────────────── */
+
 h1 {
   font-size: 24px;
   font-weight: 700;
@@ -322,7 +319,7 @@ h3 {
   margin: 16px 0 12px 0;
 }
 
-/* ── Upload Form ──────────────────────────────────────────────────────────── */
+
 .upload-form {
   display: flex;
   width: min(100%, 640px);
@@ -364,7 +361,7 @@ h3 {
   align-self: flex-start;
   margin-top: 4px;
 }
-/* ── Post Grid (Infinite / Scrolling UX) ─────────────────────────────────── */
+
 .post-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
@@ -418,7 +415,7 @@ h3 {
   border-color: #16a34a;
 }
 
-/* ── Single Post Detail ───────────────────────────────────────────────────── */
+
 .post-view {
   max-width: 1100px;
   margin: 0 auto;
@@ -472,7 +469,7 @@ h3 {
   flex-wrap: wrap;
 }
 
-/* ── Form Controls & Buttons ──────────────────────────────────────────────── */
+
 input, select, textarea {
   background: var(--bg-input);
   color: var(--text-main);
@@ -506,13 +503,13 @@ button:hover {
   border-color: var(--border-hover);
 }
 
-/* Filter bar on Browse page */
+
 form select, form input[name="q"] {
   margin-right: 8px;
   margin-bottom: 8px;
 }
 
-/* ── Pagination ───────────────────────────────────────────────────────────── */
+
 .pagination {
   margin: 32px 0;
   display: flex;
@@ -551,7 +548,7 @@ form select, form input[name="q"] {
   color: var(--text-dim);
 }
 
-/* ── Comments ─────────────────────────────────────────────────────────────── */
+
 .comments {
   margin-top: 40px;
   border-top: 1px solid var(--border-color);
@@ -582,7 +579,7 @@ form select, form input[name="q"] {
   color: var(--text-muted);
 }
 
-/* ── Flash Notifications ──────────────────────────────────────────────────── */
+
 .flash {
   margin: 0 0 16px;
   padding: 2px 0 2px 10px;
@@ -603,7 +600,7 @@ form select, form input[name="q"] {
   border-left-color: #ef4444;
 }
 
-/* ── Minimalist Home Page ─────────────────────────────────────────────────── */
+
 body:has(.gelbooru-home) {
   background-color: var(--bg-main);
 }
@@ -739,7 +736,7 @@ body:has(.gelbooru-home) header {
   text-decoration: underline;
 }
 
-/* Minimalist Counter Container - Solid Clean Styling (NO GRADIENT) */
+
 .gelbooru-counter-wrapper {
   position: relative;
   width: 100%;
@@ -753,7 +750,7 @@ body:has(.gelbooru-home) header {
 }
 
 .blue-band {
-  display: none; /* Removed gradient background entirely */
+  display: none;
 }
 
 .digit-counter {
@@ -778,7 +775,7 @@ footer {
   margin-top: 48px;
 }
 
-/* Admin panel accordion sections */
+
 .admin-section {
   margin: 12px 0;
   background: var(--bg-card);
@@ -911,7 +908,7 @@ footer {
   margin: 0;
   color: var(--text-muted);
 }
-/* ── Mobile Responsiveness ────────────────────────────────────────────────── */
+
 @media (max-width: 850px) {
   .gelbooru-home {
     padding: 28px 16px 48px;
@@ -932,7 +929,7 @@ footer {
 
   #sidebar {
     width: 100%;
-    order: 2; /* Show tags below the image/posts on mobile */
+    order: 2;
   }
 
   main {
@@ -966,21 +963,21 @@ footer {
     flex-wrap: wrap;
     justify-content: center;
   }
-  
+
   .post-actions {
     justify-content: center;
   }
 
-  /* Hamburger Navbar Toggle */
+
   #sidebar {
     display: none;
     width: 100%;
-    order: 2; /* Show tags below the image/posts on mobile */
+    order: 2;
   }
   #sidebar.open {
     display: block;
   }
-  
+
   .navbar-hamburger {
     display: inline-block;
     background: transparent;
@@ -994,7 +991,7 @@ footer {
   }
 }
 
-/* Hide hamburger on desktop */
+
 @media (min-width: 851px) {
   .navbar-hamburger {
     display: none;

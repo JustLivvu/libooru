@@ -119,7 +119,7 @@ class Auth
         return false;
     }
 
-    /** Stable, non-reversible rate-limit key based on the direct peer address. */
+
     public static function requestSubject(): string
     {
         $ip = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
@@ -180,7 +180,7 @@ class Auth
         return (int)DB::lastId();
     }
 
-    /** Save a registration for an administrator to approve later. */
+
     public static function requestRegistration(string $name, string $password, string $email = '', string $registrationReason = ''): int|false
     {
         if (strlen($name) < 2 || strlen($name) > 32 || strlen($password) < 4) return false;
@@ -215,13 +215,13 @@ class Auth
         return DB::exec('DELETE FROM registration_requests WHERE id = ?', [$requestId]) > 0;
     }
 
-    /** Authenticate via API key (from header or query param). */
+
     public static function fromApiKey(string $key): ?array
     {
         return DB::row('SELECT * FROM users WHERE api_key = ?', [$key]) ?: null;
     }
 
-    /** Inject a user directly (used by API after key auth). */
+
     public static function setUser(array $user): void
     {
         self::$user = $user;

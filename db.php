@@ -150,11 +150,11 @@ class DB
             CREATE INDEX IF NOT EXISTS idx_registration_requests_created ON registration_requests(created_at ASC);
         ");
 
-        // Built-in roles are immutable safeguards. Custom roles are managed in /admin.
+
         $pdo->exec("INSERT OR IGNORE INTO roles (name, slug, permissions, is_system) VALUES ('Administrator', 'admin', '[\"*\"]', 1)");
         $pdo->exec("INSERT OR IGNORE INTO roles (name, slug, permissions, is_system) VALUES ('User', 'user', '[]', 1)");
 
-        // Add blacklist column to users if missing
+
         $userCols = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
         $hasBlacklist = false;
         foreach ($userCols as $col) {
@@ -164,7 +164,7 @@ class DB
             $pdo->exec("ALTER TABLE users ADD COLUMN blacklist TEXT NOT NULL DEFAULT ''");
         }
 
-        // Store the optional reason supplied during registration.
+
         $hasRegistrationReason = false;
         foreach ($userCols as $col) {
             if ($col['name'] === 'registration_reason') { $hasRegistrationReason = true; break; }
@@ -173,7 +173,7 @@ class DB
             $pdo->exec("ALTER TABLE users ADD COLUMN registration_reason TEXT NOT NULL DEFAULT ''");
         }
 
-        // Add quality column if it doesn't exist yet (migration)
+
         $cols = $pdo->query('PRAGMA table_info(posts)')->fetchAll(PDO::FETCH_ASSOC);
         $hasQuality = false;
         foreach ($cols as $col) {
@@ -184,9 +184,9 @@ class DB
         }
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_quality ON posts(quality)');
 
-        // Auto-calculate quality for posts based on resolution (width & height)
+
         $pdo->exec("
-            UPDATE posts SET quality = CASE 
+            UPDATE posts SET quality = CASE
                 WHEN max(COALESCE(width,0), COALESCE(height,0)) >= 3840 OR min(COALESCE(width,0), COALESCE(height,0)) >= 2160 THEN 'ultra'
                 WHEN max(COALESCE(width,0), COALESCE(height,0)) >= 1920 OR min(COALESCE(width,0), COALESCE(height,0)) >= 1080 THEN 'high'
                 WHEN max(COALESCE(width,0), COALESCE(height,0)) >= 1280 OR min(COALESCE(width,0), COALESCE(height,0)) >= 720 THEN 'medium'
@@ -195,7 +195,7 @@ class DB
             WHERE width IS NOT NULL AND height IS NOT NULL;
         ");
 
-        // Seed admin user if no users exist
+
         $count = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
         if ($count === 0) {
             $hash   = password_hash('admin', PASSWORD_DEFAULT);
@@ -207,7 +207,7 @@ class DB
         }
     }
 
-    // ---------- helpers ----------
+
 
     public static function row(string $sql, array $params = []): ?array
     {
@@ -238,7 +238,7 @@ class DB
         return $st->rowCount();
     }
 
-    /** Atomically consume one action from a fixed-window rate limit. */
+
     public static function consumeRateLimit(string $bucket, string $subject, int $max, int $windowSeconds): bool
     {
         $now = time();

@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Minimal templating helpers.
- */
+
+
+
 class View
 {
     public static function e(mixed $v): string
@@ -40,7 +40,7 @@ class View
         return rtrim($origin, '/') . $path;
     }
 
-    // ── Site settings ─────────────────────────────────────────────────────────
+
 
     private static ?array $siteSettings = null;
 
@@ -65,10 +65,10 @@ class View
              ON CONFLICT(key) DO UPDATE SET value = excluded.value',
             [$key, $value]
         );
-        self::$siteSettings = null; // bust cache
+        self::$siteSettings = null;
     }
 
-    // ── Layout ────────────────────────────────────────────────────────────────
+
 
     public static function header(string $title, ?array $user = null, ?array $sidebarTags = null, array $meta = []): void
     {
@@ -125,7 +125,7 @@ class View
             $imageMeta .= '<meta name="twitter:image" content="' . $e($image) . '">' . "\n";
         }
 
-        // Logo / banner brand markup
+
         if ($siteLogo) {
             $brand = '<img src="' . $e($siteLogo) . '" alt="' . $e($siteName) . '" style="height:32px;vertical-align:middle">';
         } elseif ($siteBanner) {
@@ -258,7 +258,7 @@ HTML;
 HTML;
     }
 
-    // ── Flash messages ────────────────────────────────────────────────────────
+
 
     public static function flash(string $key = 'flash'): void
     {
@@ -275,7 +275,7 @@ HTML;
         $_SESSION['flash_type'] = $type;
     }
 
-    // ── Pagination ────────────────────────────────────────────────────────────
+
 
     public static function paginator(int $currentPage, int $totalPages, string $basePath, array $params = []): void
     {
@@ -286,8 +286,8 @@ HTML;
         if ($totalPages <= 10) {
             $pagesToShow = range(1, $totalPages);
         } else {
-            // Keep the current page and its nearby pages visible, while also
-            // preserving direct links to both ends of a long result list.
+
+
             $pagesToShow = array_merge(
                 [1, 2],
                 range(max(1, $currentPage - 2), min($totalPages, $currentPage + 2)),
@@ -324,7 +324,7 @@ HTML;
         echo '</nav>';
     }
 
-    // ── Post grid ─────────────────────────────────────────────────────────────
+
 
     public static function postGrid(array $posts): void
     {
@@ -353,7 +353,7 @@ HTML;
         echo '</div>';
     }
 
-    // ── CSRF ──────────────────────────────────────────────────────────────────
+
 
     public static function csrfToken(): string
     {
@@ -377,7 +377,7 @@ HTML;
         }
     }
 
-    // ── Sidebar ───────────────────────────────────────────────────────────────
+
 
     public static function sidebar(array $tags = [], ?array $user = null): void
     {

@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Image helper: thumbnail generation and URL builders.
- */
+
+
+
 class Image
 {
     public static function thumbPath(string $filename): string
@@ -30,17 +30,17 @@ class Image
         return Storage::getFileUrl($filename);
     }
 
-    /**
-     * Generate a square thumbnail using GD or ffmpeg for video.
-     * Returns true on success, false on failure.
-     */
+
+
+
+
     public static function makeThumbnail(string $srcPath, string $destPath, string $mime): bool
     {
         $tw = THUMB_WIDTH;
         $th = THUMB_HEIGHT;
 
         if (str_starts_with($mime, 'video/')) {
-            // Generate video thumbnail using ffmpeg with high quality
+
             $cmd = sprintf(
                 'timeout %ds ffmpeg -i %s -ss 00:00:00.000 -vframes 1 -vf "scale=\'max(%d,a*%d)\':\'max(%d,%d/a)\',crop=%d:%d" -q:v 2 -y %s 2>/dev/null',
                 MEDIA_PROCESS_TIMEOUT, escapeshellarg($srcPath), $tw, $tw, $th, $th, $tw, $th, escapeshellarg($destPath)
@@ -61,7 +61,7 @@ class Image
         };
         if (!$src) return false;
 
-        // Calculate crop to square center
+
         if ($origW > $origH) {
             $cropX = (int)(($origW - $origH) / 2);
             $cropY = 0;
@@ -75,7 +75,7 @@ class Image
         $thumb = imagecreatetruecolor($tw, $th);
         if (!$thumb) { imagedestroy($src); return false; }
 
-        // Preserve transparency for PNG/GIF/WebP
+
         if (in_array($mime, ['image/png', 'image/gif', 'image/webp'], true)) {
             imagealphablending($thumb, false);
             imagesavealpha($thumb, true);

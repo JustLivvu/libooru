@@ -19,9 +19,9 @@ import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# -----------------------------------------------------------------------------
-# Database abstraction (Native sqlite3 with fallback to PHP/PDO)
-# -----------------------------------------------------------------------------
+
+
+
 
 class Database:
     def __init__(self, db_path):
@@ -279,9 +279,9 @@ class Database:
                         self.existing_md5s.add(post_data['md5'])
                 return post_id
 
-# -----------------------------------------------------------------------------
-# Image & Video Utilities (Dimensions and Thumbnails)
-# -----------------------------------------------------------------------------
+
+
+
 
 def determine_quality(w, h):
     if not w or not h:
@@ -361,7 +361,6 @@ def process_image(src_path, dst_thumb_path, max_w=150, max_h=150):
     ];
     $ext = $extMap[$mime] ?? 'jpg';
 
-    // Create thumbnail
     $ratio = min($maxW / $w, $maxH / $h);
     $nw = max(1, (int)round($w * $ratio));
     $nh = max(1, (int)round($h * $ratio));
@@ -401,9 +400,9 @@ def process_image(src_path, dst_thumb_path, max_w=150, max_h=150):
             return data
     raise RuntimeError(f"Failed to process image: {res.stderr or res.stdout}")
 
-# -----------------------------------------------------------------------------
-# Scraper & Downloader
-# -----------------------------------------------------------------------------
+
+
+
 
 class RealbooruDownloader:
     BASE_URL = "https://realbooru.com/index.php"
@@ -422,12 +421,12 @@ class RealbooruDownloader:
         self.use_api = use_api
         self.uploads_dir = os.path.join(data_dir, "uploads")
         self.thumbs_dir = os.path.join(data_dir, "thumbs")
-        # Path for scraper cache
+
         self.cache_path = os.path.join(data_dir, "scraper_cache.json")
-        # Optionally reset cache
+
         if reset_cache and os.path.exists(self.cache_path):
             os.remove(self.cache_path)
-        # Load last processed pid from cache if available
+
         self.last_pid = 0
         if os.path.exists(self.cache_path):
             try:
@@ -507,13 +506,13 @@ class RealbooruDownloader:
         elif img_url.startswith('/'):
             img_url = 'https://realbooru.com' + img_url
 
-        # Normalize redundant slashes in domain URL
+
         img_url = re.sub(r'^(https?://realbooru\.com)/+', r'\1/', img_url)
 
         tags = re.findall(r'<a class=[\"\'](?:tag-type-[^\"\']+|model)[\"\'] href=[\"\'][^\"\']*tags=([^\"\'&>]+)', html)
         tags = [urllib.parse.unquote(t) for t in tags]
 
-        # Explicitly ensure the extra_tag ('realbooru') is added
+
         if self.extra_tag and self.extra_tag not in tags:
             tags.append(self.extra_tag)
 
@@ -654,7 +653,7 @@ class RealbooruDownloader:
 
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
             while True:
-                # Delikatny odstęp czasowy (100ms) aby uniknąć bloku/rate-limit ze strony serwera przy szybkim pomijaniu
+
                 time.sleep(0.1)
 
                 try:
@@ -681,8 +680,8 @@ class RealbooruDownloader:
                 new_post_ids = [p_id for p_id in post_ids if p_id not in submitted_ids]
 
                 if not new_post_ids:
-                    # Wszystkie ID z tej strony były już przetworzone w tej sesji —
-                    # traktuj całą stronę jako pominięcia, żeby consecutive_skips działał poprawnie
+
+
                     page_skip_count = len(post_ids)
                     consecutive_skips += page_skip_count
                     skipped_count += page_skip_count

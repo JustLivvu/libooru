@@ -5,18 +5,18 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/s3.php';
 
-/**
- * Storage Abstraction Layer: handles local vs S3 media storage.
- */
+
+
+
 class Storage
 {
     private static ?S3Client $s3Client = null;
 
-    /**
-     * Keep media compatible with buckets populated by the original path-style
-     * client. Some S3 providers expose a bucket-named endpoint while still
-     * storing the bucket name as the first key segment.
-     */
+
+
+
+
+
     private static function s3MediaKey(string $key): string
     {
         $key = ltrim($key, '/');
@@ -30,18 +30,18 @@ class Storage
         return $key;
     }
 
-    /**
-     * Get configured storage driver: 'local' or 's3'.
-     */
+
+
+
     public static function getDriver(): string
     {
         $driver = View::siteSetting('storage_driver', 'local');
         return in_array($driver, ['local', 's3'], true) ? $driver : 'local';
     }
 
-    /**
-     * Get S3Client instance based on current site settings.
-     */
+
+
+
     public static function getS3Client(): ?S3Client
     {
         if (self::$s3Client === null) {
@@ -59,9 +59,9 @@ class Storage
         return self::$s3Client;
     }
 
-    /**
-     * Store upload file and thumbnail.
-     */
+
+
+
     public static function putMedia(string $filename, string $uploadTmpPath, string $thumbTmpPath, string $uploadMime, string $thumbMime): bool
     {
         $driver = self::getDriver();
@@ -72,10 +72,10 @@ class Storage
                 throw new RuntimeException('S3 storage is enabled but S3 parameters (endpoint, access key, secret key) are not fully configured.');
             }
 
-            // Upload full media to S3 under uploads/
+
             $s3->putObject(self::s3MediaKey('uploads/' . $filename), $uploadTmpPath, $uploadMime, true);
 
-            // Determine thumbnail extension
+
             $thumbExt = pathinfo($filename, PATHINFO_EXTENSION);
             if (in_array(strtolower($thumbExt), ['mp4', 'webm'], true)) {
                 $thumbFilename = pathinfo($filename, PATHINFO_FILENAME) . '.jpg';
@@ -83,16 +83,16 @@ class Storage
                 $thumbFilename = $filename;
             }
 
-            // Upload thumbnail to S3 under thumbs/
+
             $s3->putObject(self::s3MediaKey('thumbs/' . $thumbFilename), $thumbTmpPath, $thumbMime, true);
 
             return true;
         }
 
-        // Local storage: move to UPLOAD_DIR and THUMB_DIR
+
         $destUpload = UPLOAD_DIR . '/' . $filename;
         if (!move_uploaded_file($uploadTmpPath, $destUpload)) {
-            // Fallback if not uploaded file (e.g. copied file)
+
             if (!copy($uploadTmpPath, $destUpload)) {
                 throw new RuntimeException('Failed to save file to local upload directory.');
             }
@@ -119,9 +119,9 @@ class Storage
         return true;
     }
 
-    /**
-     * Delete post media and thumbnail from configured storage.
-     */
+
+
+
     public static function deleteMedia(string $filename): void
     {
         $driver = self::getDriver();
@@ -147,17 +147,17 @@ class Storage
         }
     }
 
-    /**
-     * Get public URL for uploaded full file.
-     */
+
+
+
     public static function getFileUrl(string $filename): string
     {
         return SITE_BASE . '/file/' . rawurlencode($filename);
     }
 
-    /**
-     * Get public URL for thumbnail.
-     */
+
+
+
     public static function getThumbUrl(string $filename): string
     {
         $ext = pathinfo($filename, PATHINFO_EXTENSION);
@@ -168,9 +168,9 @@ class Storage
         return SITE_BASE . '/thumb/' . rawurlencode($filename);
     }
 
-    /**
-     * Stream or serve file content if proxied.
-     */
+
+
+
     public static function serveFile(string $type, string $filename): void
     {
         $usesApiKey = (string)($_SERVER['HTTP_X_API_KEY'] ?? '') !== '';
@@ -187,8 +187,8 @@ class Storage
             Auth::setUser($apiUser);
         }
 
-        // Media requests never modify the session. Release its file lock before
-        // talking to storage so requests from one browser can run concurrently.
+
+
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
@@ -203,9 +203,9 @@ class Storage
             if ($s3) {
                 $key = self::s3MediaKey(($type === 'thumb' ? 'thumbs/' : 'uploads/') . $filename);
 
-                // Authenticate in the application, but let object storage serve
-                // browser thumbnails and large videos. This keeps PHP-FPM workers
-                // free and lets the browser fetch thumbnails concurrently.
+
+
+
                 if (($type === 'thumb' || $isVideo) && !$usesApiKey) {
                     $ttl = $type === 'thumb' ? S3_THUMB_URL_TTL : S3_VIDEO_URL_TTL;
                     $cacheControl = $type === 'thumb'
@@ -221,7 +221,7 @@ class Storage
                     'gif' => 'image/gif', 'webp' => 'image/webp', 'mp4' => 'video/mp4', 'webm' => 'video/webm'
                 ];
                 $mime = $mimeTypes[$ext] ?? 'application/octet-stream';
-                
+
                 header('Content-Type: ' . $mime);
                 header('Cache-Control: public, max-age=31536000, immutable');
                 $s3->streamObject($key, $isVideo);

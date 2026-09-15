@@ -65,7 +65,7 @@ foreach ($posts as $post) {
         $unchanged++;
     }
 
-    // Be considerate of the source site while processing a full archive.
+
     usleep(250000);
 }
 

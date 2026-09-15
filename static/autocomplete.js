@@ -1,4 +1,4 @@
-/* Libooru — tag autocomplete */
+
 (function () {
   'use strict';
 
@@ -95,13 +95,11 @@
     activeIndex = index;
   }
 
-  // Given the full input value, return the last tag being typed
   function getCurrentToken(value) {
     const parts = value.split(/\s+/);
     return parts[parts.length - 1] || '';
   }
 
-  // Replace the last token in value with newToken
   function replaceCurrentToken(value, newToken) {
     const parts = value.split(/\s+/).filter(Boolean);
     parts.pop();
@@ -160,16 +158,13 @@
     });
 
     input.addEventListener('blur', function () {
-      // Slight delay so mousedown on dropdown fires first
       setTimeout(removeDropdown, 150);
     });
   }
 
-  // Attach to all matching inputs now and watch for dynamically added ones
   function init() {
     document.querySelectorAll('input[name="q"], input[name="tags"]').forEach(attachAutocomplete);
 
-    // Also handle sidebar input added by PHP
     const observer = new MutationObserver(function () {
       document.querySelectorAll('input[name="q"], input[name="tags"]').forEach(attachAutocomplete);
     });
