@@ -6,6 +6,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/image.php';
 require_once __DIR__ . '/storage.php';
+require_once __DIR__ . '/discord_webhook.php';
 
 
 
@@ -275,6 +276,12 @@ class Post
 
         $tags = preg_split('/[\s,]+/', trim($meta['tags'] ?? ''), -1, PREG_SPLIT_NO_EMPTY);
         if ($tags) self::setTags($postId, $tags);
+
+        try {
+            DiscordWebhook::notifyNewPost($postId);
+        } catch (Throwable $e) {
+            error_log('Discord webhook failed for post #' . $postId . ': ' . $e->getMessage());
+        }
 
         return $postId;
     }

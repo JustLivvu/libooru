@@ -1264,6 +1264,8 @@ function page_admin(?array $user, string $method): void
             'update_role' => 'manage_roles',
             'delete_role' => 'manage_roles',
             'site_settings' => 'manage_site_settings',
+            'webhook_settings' => 'manage_site_settings',
+            'test_discord_webhook' => 'manage_site_settings',
             'storage_settings' => 'manage_storage_settings',
             'registrations_settings' => 'manage_registration_settings',
             'approve_registration_request' => 'manage_registration_requests',
@@ -1363,6 +1365,39 @@ function page_admin(?array $user, string $method): void
             $key = bin2hex(random_bytes(16));
             DB::exec('UPDATE users SET api_key = ? WHERE id = ?', [$key, $uid]);
             View::setFlash('API key regenerated.', 'ok');
+        } elseif (in_array($action, ['webhook_settings', 'test_discord_webhook'], true)) {
+            $submittedUrl = trim((string)($_POST['discord_webhook_url'] ?? ''));
+            $clearWebhook = isset($_POST['clear_discord_webhook']);
+            $enabled = isset($_POST['discord_webhook_enabled']) ? '1' : '0';
+            $savedUrl = View::siteSetting('discord_webhook_url', '');
+
+            if ($clearWebhook) {
+                View::setSiteSetting('discord_webhook_url', '');
+                View::setSiteSetting('discord_webhook_enabled', '0');
+                View::setFlash('Discord webhook removed.', 'ok');
+            } elseif ($submittedUrl !== '' && !DiscordWebhook::isValidUrl($submittedUrl)) {
+                View::setFlash('Enter a valid Discord webhook URL.', 'error');
+            } else {
+                if ($submittedUrl !== '') {
+                    View::setSiteSetting('discord_webhook_url', $submittedUrl);
+                    $savedUrl = $submittedUrl;
+                }
+                if ($enabled === '1' && !DiscordWebhook::isValidUrl($savedUrl)) {
+                    View::setFlash('Add a valid Discord webhook URL before enabling notifications.', 'error');
+                } else {
+                    View::setSiteSetting('discord_webhook_enabled', $enabled);
+                    View::setSiteSetting('webhook_site_url', rtrim(View::absoluteUrl(View::url('/')), '/'));
+                    if ($action === 'test_discord_webhook') {
+                        $testSent = DiscordWebhook::sendTest();
+                        View::setFlash(
+                            $testSent ? 'Test message sent to Discord.' : 'Discord rejected the test message.',
+                            $testSent ? 'ok' : 'error'
+                        );
+                    } else {
+                        View::setFlash('Webhook settings saved.', 'ok');
+                    }
+                }
+            }
         } elseif ($action === 'site_settings') {
             $name    = trim($_POST['site_name'] ?? '');
             $description = trim($_POST['site_description'] ?? '');
@@ -1479,6 +1514,8 @@ function page_admin(?array $user, string $method): void
 
         $sectionByAction = [
             'site_settings' => 'site-settings',
+            'webhook_settings' => 'webhooks',
+            'test_discord_webhook' => 'webhooks',
             'storage_settings' => 'media-storage',
             'registrations_settings' => 'registrations-content',
             'resolve_post_report' => 'post-reports',
@@ -1530,6 +1567,8 @@ function page_admin(?array $user, string $method): void
     $curHomeHeaderImage  = View::siteSetting('home_header_image');
     $curDefaultBlacklist = View::siteSetting('default_blacklist', '');
     $curTermsOfService   = View::siteSetting('terms_of_service', '');
+    $discordWebhookConfigured = DiscordWebhook::isValidUrl(View::siteSetting('discord_webhook_url', ''));
+    $discordWebhookEnabled = View::siteSetting('discord_webhook_enabled', '0') === '1';
 
     $curStorageDriver = View::siteSetting('storage_driver', 'local');
     $curS3Endpoint    = View::siteSetting('s3_endpoint', '');
@@ -1593,6 +1632,27 @@ function page_admin(?array $user, string $method): void
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Default Blacklist Tags for New Users <small>(space or line separated)</small></span><textarea name="default_blacklist" rows="2" style="width:100%" placeholder="e.g. nsfw gore">' . View::e($curDefaultBlacklist) . '</textarea></label>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Terms of Service <small>(shown at /terms)</small></span><textarea name="terms_of_service" rows="12" style="width:100%" placeholder="Write your Terms of Service…">' . View::e($curTermsOfService) . '</textarea></label>';
     echo '<button style="align-self:flex-start;">Save Settings</button>';
+    echo '</form>';
+    echo '</div></details>';
+    }
+
+
+    if (Auth::can('manage_site_settings', $user)) {
+    echo '<details class="admin-section"' . ($openSection === 'webhooks' ? ' open' : '') . '>';
+    echo '<summary>Webhooks</summary>';
+    echo '<div class="admin-section-content">';
+    echo '<form method="post" style="max-width:600px; display:flex; flex-direction:column; gap:15px;">';
+    View::csrfField();
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Discord webhook URL</span><input type="password" name="discord_webhook_url" value="" autocomplete="new-password" placeholder="' . ($discordWebhookConfigured ? 'Configured — leave blank to keep it' : 'https://discord.com/api/webhooks/...') . '"></label>';
+    echo '<label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" name="discord_webhook_enabled" value="1"' . ($discordWebhookEnabled ? ' checked' : '') . '> <span>Send a notification when a new post is created</span></label>';
+    if ($discordWebhookConfigured) {
+        echo '<label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" name="clear_discord_webhook" value="1"> <span>Remove the saved webhook</span></label>';
+    }
+    echo '<small style="color:var(--text-muted)">Messages contain the post link and its tags. Discord mentions are disabled.</small>';
+    echo '<div style="display:flex; gap:10px; flex-wrap:wrap;">';
+    echo '<button type="submit" name="action" value="webhook_settings">Save webhook</button>';
+    echo '<button type="submit" name="action" value="test_discord_webhook">Send test</button>';
+    echo '</div>';
     echo '</form>';
     echo '</div></details>';
     }

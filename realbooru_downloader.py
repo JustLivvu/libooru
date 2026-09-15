@@ -229,6 +229,7 @@ class Database:
                 if 'md5' in post_data:
                     self.existing_md5s.add(post_data['md5'])
 
+                self._notify_discord(post_id, cleaned_tags)
                 return post_id
             else:
                 code = """
@@ -277,7 +278,60 @@ class Database:
                         self.existing_post_ids.add(str(pid))
                     if 'md5' in post_data:
                         self.existing_md5s.add(post_data['md5'])
+                    self._notify_discord(post_id, tags)
                 return post_id
+
+    def _notify_discord(self, post_id, tags):
+        try:
+            keys = ('discord_webhook_enabled', 'discord_webhook_url', 'webhook_site_url', 'site_name')
+            if self.use_native:
+                placeholders = ','.join('?' for _ in keys)
+                rows = self.conn.execute(
+                    f"SELECT key, value FROM site_settings WHERE key IN ({placeholders})",
+                    keys
+                ).fetchall()
+                settings = {row[0]: row[1] for row in rows}
+            else:
+                code = """
+                $keys = ['discord_webhook_enabled', 'discord_webhook_url', 'webhook_site_url', 'site_name'];
+                $marks = implode(',', array_fill(0, count($keys), '?'));
+                $st = $db->prepare("SELECT key, value FROM site_settings WHERE key IN ($marks)");
+                $st->execute($keys);
+                echo json_encode($st->fetchAll(PDO::FETCH_KEY_PAIR));
+                """
+                settings = json.loads(self._exec_php_sql(code, []))
+
+            if settings.get('discord_webhook_enabled') != '1':
+                return
+            webhook_url = settings.get('discord_webhook_url', '')
+            parsed = urllib.parse.urlparse(webhook_url)
+            allowed_hosts = {'discord.com', 'discordapp.com', 'canary.discord.com', 'ptb.discord.com'}
+            if parsed.scheme != 'https' or parsed.hostname not in allowed_hosts:
+                return
+            if not re.fullmatch(r'/api(?:/v\d+)?/webhooks/\d+/[A-Za-z0-9._-]+/?', parsed.path):
+                return
+
+            base_url = settings.get('webhook_site_url', '').rstrip('/')
+            if not base_url:
+                return
+            tag_text = ', '.join(tags) if tags else 'none'
+            if len(tag_text) > 1700:
+                tag_text = tag_text[:1697] + '...'
+            payload = {
+                'username': settings.get('site_name') or 'Libooru',
+                'content': f"**New post #{post_id}**\n{base_url}/post/{post_id}\n**Tags:** {tag_text}",
+                'allowed_mentions': {'parse': []},
+            }
+            request = urllib.request.Request(
+                webhook_url,
+                data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            with urllib.request.urlopen(request, timeout=7):
+                pass
+        except Exception:
+            pass
 
 
 
