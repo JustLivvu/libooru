@@ -419,7 +419,7 @@ HTML;
                 $blacklistedMap = array_flip($blacklisted);
                 $tags = array_values(array_filter($tags, fn($t) => !isset($blacklistedMap[strtolower($t['name'])])));
             }
-            $tags = array_slice($tags, 0, 20);
+            $tags = array_slice($tags, 0, 30);
             if ($tags) {
                 echo '<h5>Tags</h5>';
                 echo '<ul class="tag-list">';
