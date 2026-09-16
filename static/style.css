@@ -650,6 +650,12 @@ body:has(.gelbooru-home) header {
   margin: 0 0 24px;
 }
 
+.gelbooru-discord-link {
+  margin-bottom: 16px;
+  font-size: 14px;
+  text-underline-offset: 3px;
+}
+
 .gelbooru-subnav {
   margin-bottom: 24px;
   display: flex;

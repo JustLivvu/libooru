@@ -331,6 +331,11 @@ function page_home(?array $user): void
     }
 
 
+    $discordUrl = View::siteSetting('discord_url', '');
+    if (filter_var($discordUrl, FILTER_VALIDATE_URL) && in_array(strtolower((string)parse_url($discordUrl, PHP_URL_SCHEME)), ['http', 'https'], true)) {
+        echo '  <a class="gelbooru-discord-link" href="' . $e($discordUrl) . '" target="_blank" rel="noopener noreferrer">Join our Discord server</a>';
+    }
+
     echo '  <div class="gelbooru-subnav">';
     echo '    <a href="' . View::url('/posts') . '">Browse Posts</a>';
     echo '    <a href="' . View::url('/upload') . '">Upload</a>';
@@ -1399,12 +1404,18 @@ function page_admin(?array $user, string $method): void
                 }
             }
         } elseif ($action === 'site_settings') {
+            $discordUrl = trim((string)($_POST['discord_url'] ?? ''));
+            if ($discordUrl !== '' && (strlen($discordUrl) > 2048 || !filter_var($discordUrl, FILTER_VALIDATE_URL) || !in_array(strtolower((string)parse_url($discordUrl, PHP_URL_SCHEME)), ['http', 'https'], true))) {
+                View::setFlash('Discord URL must be a valid HTTP or HTTPS address.', 'error');
+                Router::redirect('/admin', ['open' => 'site-settings']);
+            }
             $name    = trim($_POST['site_name'] ?? '');
             $description = trim($_POST['site_description'] ?? '');
             $default = trim($_POST['default_blacklist'] ?? '');
             $terms   = trim($_POST['terms_of_service'] ?? '');
             if ($name !== '') View::setSiteSetting('site_name', $name);
             View::setSiteSetting('site_description', $description);
+            View::setSiteSetting('discord_url', $discordUrl);
             foreach (['site_logo_upload' => 'site_logo', 'site_banner_upload' => 'site_banner', 'home_header_upload' => 'home_header_image'] as $field => $setting) {
                 $oldImage = View::siteSetting($setting);
                 if (isset($_POST['clear_' . $setting])) {
@@ -1562,6 +1573,7 @@ function page_admin(?array $user, string $method): void
 
     $curName             = View::siteSetting('site_name', SITE_NAME);
     $curDescription      = View::siteSetting('site_description', '');
+    $curDiscordUrl       = View::siteSetting('discord_url', '');
     $curLogo             = View::siteSetting('site_logo');
     $curBanner           = View::siteSetting('site_banner');
     $curHomeHeaderImage  = View::siteSetting('home_header_image');
@@ -1622,6 +1634,7 @@ function page_admin(?array $user, string $method): void
     View::csrfField();
     echo '<input type="hidden" name="action" value="site_settings">';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Site name</span><input name="site_name" value="' . View::e($curName) . '" style="width:100%"></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Discord URL <small>(leave empty to hide the homepage link)</small></span><input type="url" name="discord_url" value="' . View::e($curDiscordUrl) . '" maxlength="2048" placeholder="https://discord.gg/your-invite" style="width:100%"></label>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>SEO description <small>(used by search engines and Discord)</small></span><textarea name="site_description" rows="3" maxlength="200" style="width:100%" placeholder="Describe the site in one concise sentence…">' . View::e($curDescription) . '</textarea></label>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Navbar logo <small>(saved locally)</small></span><input type="file" name="site_logo_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
     if ($curLogo) echo '<label><input type="checkbox" name="clear_site_logo"> Remove current navbar logo</label>';
