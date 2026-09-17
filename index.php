@@ -962,7 +962,7 @@ function page_user(?array $user, string $targetName): void
     if (!$user && View::siteSetting('require_login_posts', '0') === '1') {
         Router::redirect('/login');
     }
-    $target = DB::row('SELECT id, name, email, role, created_at, avatar, banner, biography FROM users WHERE name = ?', [$targetName]);
+    $target = DB::row('SELECT id, name, email, role, created_at, avatar, banner, biography, display_name FROM users WHERE name = ?', [$targetName]);
     if (!$target) {
         http_response_code(404);
         View::header('User not found', $user);
@@ -983,7 +983,8 @@ function page_user(?array $user, string $targetName): void
         ? (int)DB::scalar('SELECT COUNT(*) FROM favorites WHERE user_id = ?', [(int)$target['id']])
         : 0;
 
-    View::header($target['name'], $user);
+    $displayName = $target['display_name'] !== '' ? $target['display_name'] : $target['name'];
+    View::header($displayName, $user);
     View::flash();
     echo '<section class="user-profile">';
     if ($target['banner'] !== '') {
@@ -993,7 +994,7 @@ function page_user(?array $user, string $targetName): void
     if ($target['avatar'] !== '') {
         echo '<img class="profile-avatar" src="' . View::e($target['avatar']) . '" alt="' . View::e($target['name']) . ' profile picture">';
     }
-    echo '<h1>' . View::e($target['name']) . '</h1>';
+    echo '<h1>' . View::e($displayName) . '</h1>';
     echo '</div>';
     if ($target['biography'] !== '') {
         echo '<div class="profile-biography">' . View::e($target['biography']) . '</div>';
@@ -2059,6 +2060,7 @@ function page_settings(?array $user, string $method): void
     $error = '';
     $apiKey = null;
     $biography = $user['biography'] ?? '';
+    $displayName = $user['display_name'] ?? '';
 
     if ($method === 'POST') {
         View::verifyCsrf();
@@ -2066,8 +2068,13 @@ function page_settings(?array $user, string $method): void
 
         if ($action === 'save_profile') {
             $biography = trim(is_string($_POST['biography'] ?? null) ? $_POST['biography'] : '');
+            $displayName = trim(is_string($_POST['display_name'] ?? null) ? $_POST['display_name'] : ($user['display_name'] ?? ''));
             $newImages = [];
             try {
+                if (!mb_check_encoding($displayName, 'UTF-8') || mb_strlen($displayName, 'UTF-8') > 64
+                    || preg_match('/[\p{Cc}\p{Cf}]/u', $displayName)) {
+                    throw new RuntimeException('Display name must contain no more than 64 characters and no control characters.');
+                }
                 if (!mb_check_encoding($biography, 'UTF-8') || mb_strlen($biography, 'UTF-8') > 2000) {
                     throw new RuntimeException('Biography must be valid text with no more than 2,000 characters.');
                 }
@@ -2082,8 +2089,8 @@ function page_settings(?array $user, string $method): void
                         $updated[$field] = '';
                     }
                 }
-                DB::exec('UPDATE users SET avatar = ?, banner = ?, biography = ? WHERE id = ?',
-                    [$updated['avatar'], $updated['banner'], $biography, (int)$user['id']]);
+                DB::exec('UPDATE users SET avatar = ?, banner = ?, biography = ?, display_name = ? WHERE id = ?',
+                    [$updated['avatar'], $updated['banner'], $biography, $displayName, (int)$user['id']]);
             } catch (Throwable $e) {
                 foreach ($newImages as $image) deleteLocalSiteImage($image);
                 $error = $e instanceof RuntimeException ? $e->getMessage() : 'Could not save your profile. Please try again.';
@@ -2148,6 +2155,8 @@ function page_settings(?array $user, string $method): void
     echo '<form method="post" enctype="multipart/form-data" class="profile-settings">';
     View::csrfField();
     echo '<input type="hidden" name="action" value="save_profile">';
+    echo '<label>Display name <small>(up to 64 characters)</small><input type="text" name="display_name" maxlength="64" value="' . View::e($displayName) . '" placeholder="' . View::e($user['name']) . '"></label>';
+    echo '<p class="profile-help">Shown on your profile. Leave empty to use your username. Your login and profile URL stay the same.</p>';
     echo '<p class="profile-help">JPEG, PNG, GIF or WebP, up to 5 MB per image. A square profile picture and a wide banner work best. These images and your biography are visible on your profile.</p>';
     foreach (['avatar' => 'Profile picture', 'banner' => 'Banner'] as $field => $label) {
         echo '<label>' . $label . '<input type="file" name="' . $field . '_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';

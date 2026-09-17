@@ -156,7 +156,7 @@ class DB
 
 
         $userCols = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
-        foreach (['avatar', 'banner', 'biography'] as $profileColumn) {
+        foreach (['avatar', 'banner', 'biography', 'display_name'] as $profileColumn) {
             if (!in_array($profileColumn, array_column($userCols, 'name'), true)) {
                 $pdo->exec("ALTER TABLE users ADD COLUMN $profileColumn TEXT NOT NULL DEFAULT ''");
             }
