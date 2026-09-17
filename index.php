@@ -174,6 +174,37 @@ function deleteLocalSiteImage(string $url): void
     }
 }
 
+function saveProfileImageUpload(string $field, int $userId): ?string
+{
+    $upload = $_FILES[$field] ?? null;
+    if ($upload === null || ($upload['error'] ?? null) === UPLOAD_ERR_NO_FILE) return null;
+    if (!is_array($upload) || ($upload['error'] ?? null) !== UPLOAD_ERR_OK
+        || !is_string($upload['tmp_name'] ?? null) || !is_uploaded_file($upload['tmp_name'])) {
+        throw new RuntimeException('Could not upload the selected profile image.');
+    }
+    if (filesize($upload['tmp_name']) > 5 * 1024 * 1024) {
+        throw new RuntimeException('Each profile image must be no larger than 5 MB.');
+    }
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($upload['tmp_name']);
+    $extensions = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'];
+    $dimensions = @getimagesize($upload['tmp_name']);
+    if (!isset($extensions[$mime]) || !$dimensions || ($dimensions['mime'] ?? '') !== $mime) {
+        throw new RuntimeException('Profile images must be valid JPEG, PNG, GIF, or WebP files.');
+    }
+    if ($dimensions[0] < 1 || $dimensions[1] < 1 || $dimensions[0] * $dimensions[1] > MAX_MEDIA_PIXELS) {
+        throw new RuntimeException('Profile images must contain no more than 20 million pixels.');
+    }
+    if (!is_dir(SITE_ASSET_DIR) && !mkdir(SITE_ASSET_DIR, 0755, true) && !is_dir(SITE_ASSET_DIR)) {
+        throw new RuntimeException('Could not create the profile images directory.');
+    }
+    $filename = 'profile-' . $userId . '-' . bin2hex(random_bytes(16)) . '.' . $extensions[$mime];
+    if (!move_uploaded_file($upload['tmp_name'], SITE_ASSET_DIR . '/' . $filename)) {
+        throw new RuntimeException('Could not save the selected profile image.');
+    }
+    chmod(SITE_ASSET_DIR . '/' . $filename, 0644);
+    return SITE_BASE . '/site-assets/' . $filename;
+}
+
 
 $path   = substr($uri, strlen($base)) ?: '/';
 $method = $_SERVER['REQUEST_METHOD'];
@@ -931,7 +962,7 @@ function page_user(?array $user, string $targetName): void
     if (!$user && View::siteSetting('require_login_posts', '0') === '1') {
         Router::redirect('/login');
     }
-    $target = DB::row('SELECT id, name, email, role, api_key, created_at FROM users WHERE name = ?', [$targetName]);
+    $target = DB::row('SELECT id, name, email, role, created_at, avatar, banner, biography FROM users WHERE name = ?', [$targetName]);
     if (!$target) {
         http_response_code(404);
         View::header('User not found', $user);
@@ -952,9 +983,22 @@ function page_user(?array $user, string $targetName): void
         ? (int)DB::scalar('SELECT COUNT(*) FROM favorites WHERE user_id = ?', [(int)$target['id']])
         : 0;
 
-    View::header('User: ' . $target['name'], $user);
+    View::header($target['name'], $user);
     View::flash();
-    echo '<h1>User: ' . View::e($target['name']) . '</h1>';
+    echo '<section class="user-profile">';
+    if ($target['banner'] !== '') {
+        echo '<img class="profile-banner" src="' . View::e($target['banner']) . '" alt="' . View::e($target['name']) . ' profile banner">';
+    }
+    echo '<div class="profile-heading">';
+    if ($target['avatar'] !== '') {
+        echo '<img class="profile-avatar" src="' . View::e($target['avatar']) . '" alt="' . View::e($target['name']) . ' profile picture">';
+    }
+    echo '<h1>' . View::e($target['name']) . '</h1>';
+    echo '</div>';
+    if ($target['biography'] !== '') {
+        echo '<div class="profile-biography">' . View::e($target['biography']) . '</div>';
+    }
+    echo '</section>';
     echo '<div style="overflow-x:auto; max-width:560px; margin-bottom:24px;"><table style="width:100%; border-collapse:collapse;">';
     echo '<tbody>';
     echo '<tr><th scope="row" style="text-align:left; padding:8px 12px; border:1px solid var(--border); width:40%;">Role</th><td style="padding:8px 12px; border:1px solid var(--border);">' . View::e($target['role']) . '</td></tr>';
@@ -2014,12 +2058,44 @@ function page_settings(?array $user, string $method): void
 
     $error = '';
     $apiKey = null;
+    $biography = $user['biography'] ?? '';
 
     if ($method === 'POST') {
         View::verifyCsrf();
         $action = $_POST['action'] ?? '';
 
-        if ($action === 'change_password') {
+        if ($action === 'save_profile') {
+            $biography = trim(is_string($_POST['biography'] ?? null) ? $_POST['biography'] : '');
+            $newImages = [];
+            try {
+                if (!mb_check_encoding($biography, 'UTF-8') || mb_strlen($biography, 'UTF-8') > 2000) {
+                    throw new RuntimeException('Biography must be valid text with no more than 2,000 characters.');
+                }
+                $profile = DB::row('SELECT avatar, banner FROM users WHERE id = ?', [(int)$user['id']]);
+                $updated = $profile;
+                foreach (['avatar', 'banner'] as $field) {
+                    $image = saveProfileImageUpload($field . '_upload', (int)$user['id']);
+                    if ($image !== null) {
+                        $newImages[] = $image;
+                        $updated[$field] = $image;
+                    } elseif (isset($_POST['remove_' . $field])) {
+                        $updated[$field] = '';
+                    }
+                }
+                DB::exec('UPDATE users SET avatar = ?, banner = ?, biography = ? WHERE id = ?',
+                    [$updated['avatar'], $updated['banner'], $biography, (int)$user['id']]);
+            } catch (Throwable $e) {
+                foreach ($newImages as $image) deleteLocalSiteImage($image);
+                $error = $e instanceof RuntimeException ? $e->getMessage() : 'Could not save your profile. Please try again.';
+            }
+            if ($error === '') {
+                foreach (['avatar', 'banner'] as $field) {
+                    if ($profile[$field] !== $updated[$field]) deleteLocalSiteImage($profile[$field]);
+                }
+                View::setFlash('Profile updated.', 'ok');
+                Router::redirect('/settings');
+            }
+        } elseif ($action === 'change_password') {
             $current = $_POST['current_password'] ?? '';
             $new     = $_POST['new_password'] ?? '';
             $confirm = $_POST['confirm_password'] ?? '';
@@ -2066,6 +2142,22 @@ function page_settings(?array $user, string $method): void
     echo '<h1>Account Settings</h1>';
 
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
+
+    echo '<h2>Profile</h2>';
+    echo '<p><a href="' . View::url('/user/' . rawurlencode($user['name'])) . '">View your profile</a></p>';
+    echo '<form method="post" enctype="multipart/form-data" class="profile-settings">';
+    View::csrfField();
+    echo '<input type="hidden" name="action" value="save_profile">';
+    echo '<p class="profile-help">JPEG, PNG, GIF or WebP, up to 5 MB per image. A square profile picture and a wide banner work best. These images and your biography are visible on your profile.</p>';
+    foreach (['avatar' => 'Profile picture', 'banner' => 'Banner'] as $field => $label) {
+        echo '<label>' . $label . '<input type="file" name="' . $field . '_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
+        if ($user[$field] !== '') {
+            echo '<img class="' . ($field === 'avatar' ? 'profile-avatar' : 'profile-banner') . '" src="' . View::e($user[$field]) . '" alt="Current ' . strtolower($label) . '">';
+            echo '<label><input type="checkbox" name="remove_' . $field . '" value="1"> Remove current ' . strtolower($label) . '</label>';
+        }
+    }
+    echo '<label>Biography <small>(up to 2,000 characters)</small><textarea name="biography" rows="6" maxlength="2000" placeholder="Tell others about yourself">' . View::e($biography) . '</textarea></label>';
+    echo '<button type="submit">Save profile</button></form>';
 
 
     echo '<h2>Tag Blacklist</h2>';

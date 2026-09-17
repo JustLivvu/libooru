@@ -1,5 +1,20 @@
 
 
+.user-profile { width: 100%; margin-bottom: 24px; }
+.profile-banner { display: block; width: 100%; aspect-ratio: 4 / 1; object-fit: cover; border-radius: var(--radius-lg); }
+.profile-heading { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+.profile-heading h1 { margin: 0; overflow-wrap: anywhere; position: relative; top: -16px; }
+.profile-avatar { display: block; width: 120px; height: 120px; object-fit: cover; border-radius: 50%; flex-shrink: 0; }
+.user-profile .profile-avatar { border: 4px solid var(--bg-main); }
+.user-profile .profile-banner + .profile-heading .profile-avatar { position: relative; z-index: 1; margin-top: -64px; margin-left: 16px; }
+.profile-biography { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.profile-settings { display: flex; flex-direction: column; align-items: stretch; gap: 16px; max-width: 640px; }
+.profile-settings label { display: block; }
+.profile-settings input[type="file"], .profile-settings textarea { display: block; width: 100%; margin-top: 6px; }
+.profile-settings textarea { resize: vertical; }
+.profile-settings button { align-self: flex-start; }
+.profile-help { color: var(--text-muted); margin: 0; }
+
 :root {
   --bg-main: #09090b;
   --bg-card: #18181b;

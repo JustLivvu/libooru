@@ -157,7 +157,7 @@ class View
 <meta name="twitter:title" content="{$e($fullTitle)}">
 <meta name="twitter:description" content="{$e($description)}">
 <script type="application/ld+json">{$jsonLdJson}</script>
-<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v=15">
+<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v=19">
 <script src="{$e(SITE_BASE)}/static/autocomplete.js" defer></script>
 </head>
 <body>
