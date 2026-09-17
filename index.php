@@ -1296,6 +1296,34 @@ function page_scraper(?array $user, string $method): void
     View::footer();
 }
 
+function renderLoginActivity(): void
+{
+    $activity = Activity::statistics();
+    echo '<h3>Login activity</h3><div class="activity-counts">';
+    foreach (['today' => 'Today', 'last_12h' => 'Last 12 hours', 'last_6h' => 'Last 6 hours', 'last_1h' => 'Last hour'] as $key => $label) {
+        echo '<div class="activity-count"><span>' . $label . '</span><strong>' . $activity['counts'][$key] . '</strong><small>unique users</small></div>';
+    }
+    echo '</div><h3>Activity graph</h3>';
+    echo '<p class="activity-note">Unique users with successful logins in each hour of the last 24 hours. Today starts at midnight in ' . View::e(ACTIVITY_TIMEZONE) . '. Recording starts when this feature is enabled.</p>';
+    $max = max(1, max(array_column($activity['hours'], 'users')));
+    echo '<div class="activity-chart"><svg viewBox="0 0 960 240" role="img" aria-labelledby="login-graph-title login-graph-description">';
+    echo '<title id="login-graph-title">Unique users logging in during the last 24 hours</title><desc id="login-graph-description">Hourly login activity. Exact counts and times are available in the table below.</desc>';
+    echo '<line x1="40" y1="200" x2="952" y2="200" class="activity-grid" />';
+    echo '<line x1="40" y1="30" x2="952" y2="30" class="activity-grid" />';
+    echo '<text x="30" y="204" text-anchor="end">0</text><text x="30" y="34" text-anchor="end">' . $max . '</text>';
+    foreach ($activity['hours'] as $i => $hour) {
+        $x = 44 + $i * 38;
+        $height = round($hour['users'] / $max * 170, 2);
+        echo '<rect class="activity-bar" x="' . $x . '" y="' . (200 - $height) . '" width="28" height="' . $height . '" rx="3"><title>' . View::e($hour['label']) . ': ' . $hour['users'] . ' unique users</title></rect>';
+        if ($hour['users'] > 0) echo '<text x="' . ($x + 14) . '" y="' . (192 - $height) . '" text-anchor="middle">' . $hour['users'] . '</text>';
+    }
+    echo '<text x="44" y="228">24 hours ago</text><text x="500" y="228" text-anchor="middle">12 hours ago</text><text x="952" y="228" text-anchor="end">Now</text></svg></div>';
+    if (array_sum(array_column($activity['hours'], 'users')) === 0) echo '<p class="activity-note">No successful logins in the last 24 hours.</p>';
+    echo '<details class="activity-hourly"><summary>Hourly details</summary><div style="overflow-x:auto"><table><thead><tr><th>Time (' . View::e(ACTIVITY_TIMEZONE) . ')</th><th>Unique users</th></tr></thead><tbody>';
+    foreach ($activity['hours'] as $hour) echo '<tr><td>' . View::e($hour['label']) . '</td><td>' . $hour['users'] . '</td></tr>';
+    echo '</tbody></table></div></details>';
+}
+
 function page_admin(?array $user, string $method): void
 {
     if (!Auth::can('access_admin_panel', $user) && !Auth::can('manage_post_reports', $user) && !Auth::can('manage_database_backups', $user)) {
@@ -1598,7 +1626,7 @@ function page_admin(?array $user, string $method): void
          FROM roles r ORDER BY r.is_system DESC, r.name COLLATE NOCASE'
     );
     $roleNames = array_column($roles, 'name', 'slug');
-    $users        = DB::rows('SELECT id, name, email, registration_reason, role, api_key, created_at FROM users ORDER BY id DESC');
+    $users        = DB::rows('SELECT id, name, email, registration_reason, role, api_key, created_at, country_code FROM users ORDER BY id DESC');
     $registrationRequests = DB::rows('SELECT id, name, email, registration_reason, created_at FROM registration_requests ORDER BY created_at ASC');
     $postReports = [];
     $pendingPostReportCount = 0;
@@ -1666,6 +1694,7 @@ function page_admin(?array $user, string $method): void
     echo '<tr><th style="text-align:left; padding:8px;">Users</th><td style="padding:8px;">' . count($users) . '</td></tr>';
     echo '</tbody>';
     echo '</table>';
+    renderLoginActivity();
     echo '</div></details>';
     }
 
@@ -2004,7 +2033,11 @@ function page_admin(?array $user, string $method): void
     foreach ($users as $u) {
         echo '<tr>';
         echo '<td>' . View::e($u['id']) . '</td>';
-        echo '<td><a href="' . View::url('/user/' . rawurlencode($u['name'])) . '">' . View::e($u['name']) . '</a></td>';
+        $countryFlag = Activity::flag($u['country_code']);
+        $countryLabel = $countryFlag !== ''
+            ? '<span class="user-country" title="IP country: ' . View::e($u['country_code']) . '" aria-label="IP country: ' . View::e($u['country_code']) . '">' . $countryFlag . '</span>'
+            : '<span class="user-country-unknown" title="Country is not available yet">Unknown</span>';
+        echo '<td><a href="' . View::url('/user/' . rawurlencode($u['name'])) . '">' . View::e($u['name']) . '</a> ' . $countryLabel . '</td>';
         echo '<td>' . View::e($u['email'] ?: '—') . '</td>';
         echo '<td>' . View::e($u['registration_reason'] ?: '—') . '</td>';
         echo '<td>' . View::e($roleNames[$u['role']] ?? $u['role']) . '</td>';

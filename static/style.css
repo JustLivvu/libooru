@@ -1,5 +1,19 @@
 
 
+.activity-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin: 16px 0 24px; }
+.activity-count { display: flex; flex-direction: column; gap: 4px; padding: 16px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-card); }
+.activity-count strong { font-size: 28px; }
+.activity-count small, .activity-note, .user-country-unknown { color: var(--text-muted); }
+.activity-chart { overflow-x: auto; padding: 16px 0; }
+.activity-chart svg { display: block; width: 100%; min-width: 600px; }
+.activity-chart text { fill: var(--text-muted); font-size: 12px; }
+.activity-grid { stroke: var(--border-color); }
+.activity-bar { fill: var(--tag-general); }
+.activity-bar:hover { fill: var(--accent); }
+.activity-hourly { margin-top: 16px; }
+.user-country { font-size: 18px; vertical-align: middle; }
+.user-country-unknown { font-size: 11px; }
+
 .user-profile { width: 100%; margin-bottom: 24px; }
 .profile-banner { display: block; width: 100%; aspect-ratio: 4 / 1; object-fit: cover; border-radius: var(--radius-lg); }
 .profile-heading { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 20px 0; }

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/activity.php';
 
 class Auth
 {
@@ -111,9 +112,10 @@ class Auth
     {
         $user = DB::row('SELECT * FROM users WHERE name = ?', [$name]);
         if ($user && password_verify($password, $user['password'])) {
+            Activity::recordLogin($user);
             session_regenerate_id(true);
             $_SESSION['user_id'] = $user['id'];
-            self::$user = $user;
+            self::$user = DB::row('SELECT * FROM users WHERE id = ?', [(int)$user['id']]);
             return true;
         }
         return false;
@@ -173,9 +175,11 @@ class Auth
         $hash   = password_hash($password, PASSWORD_DEFAULT);
         $apikey = bin2hex(random_bytes(16));
         $defaultBlacklist = class_exists('View') ? View::siteSetting('default_blacklist', '') : (string)(DB::scalar("SELECT value FROM site_settings WHERE key = 'default_blacklist'") ?: '');
+        $ip = Activity::requestIp();
+        $country = Activity::country($ip);
         DB::exec(
-            'INSERT INTO users (name, password, email, api_key, blacklist, registration_reason) VALUES (?, ?, ?, ?, ?, ?)',
-            [$name, $hash, $email, $apikey, $defaultBlacklist, trim($registrationReason)]
+            'INSERT INTO users (name, password, email, api_key, blacklist, registration_reason, last_ip, country_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [$name, $hash, $email, $apikey, $defaultBlacklist, trim($registrationReason), $ip, $country]
         );
         return (int)DB::lastId();
     }
@@ -188,9 +192,11 @@ class Auth
         if (DB::scalar('SELECT id FROM users WHERE name = ?', [$name])) return false;
         if (DB::scalar('SELECT id FROM registration_requests WHERE name = ?', [$name])) return false;
 
+        $ip = Activity::requestIp();
+        $country = Activity::country($ip);
         DB::exec(
-            'INSERT INTO registration_requests (name, password, email, registration_reason) VALUES (?, ?, ?, ?)',
-            [$name, password_hash($password, PASSWORD_DEFAULT), $email, trim($registrationReason)]
+            'INSERT INTO registration_requests (name, password, email, registration_reason, registration_ip, country_code) VALUES (?, ?, ?, ?, ?, ?)',
+            [$name, password_hash($password, PASSWORD_DEFAULT), $email, trim($registrationReason), $ip, $country]
         );
         return (int)DB::lastId();
     }
@@ -203,8 +209,8 @@ class Auth
         $apiKey = bin2hex(random_bytes(16));
         $defaultBlacklist = class_exists('View') ? View::siteSetting('default_blacklist', '') : '';
         DB::exec(
-            'INSERT INTO users (name, password, email, api_key, blacklist, registration_reason) VALUES (?, ?, ?, ?, ?, ?)',
-            [$request['name'], $request['password'], $request['email'], $apiKey, $defaultBlacklist, $request['registration_reason']]
+            'INSERT INTO users (name, password, email, api_key, blacklist, registration_reason, last_ip, country_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [$request['name'], $request['password'], $request['email'], $apiKey, $defaultBlacklist, $request['registration_reason'], $request['registration_ip'], $request['country_code']]
         );
         DB::exec('DELETE FROM registration_requests WHERE id = ?', [$requestId]);
         return true;

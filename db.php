@@ -142,6 +142,20 @@ class DB
                 PRIMARY KEY (bucket, subject)
             );
 
+            CREATE TABLE IF NOT EXISTS login_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+            CREATE INDEX IF NOT EXISTS idx_login_events_created_user ON login_events(created_at, user_id);
+            CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id);
+
+            CREATE TABLE IF NOT EXISTS ip_country_cache (
+                ip TEXT PRIMARY KEY,
+                country_code TEXT NOT NULL DEFAULT '',
+                expires_at INTEGER NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_post_tags_post ON post_tags(post_id);
             CREATE INDEX IF NOT EXISTS idx_post_tags_tag  ON post_tags(tag_id);
@@ -156,9 +170,15 @@ class DB
 
 
         $userCols = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
-        foreach (['avatar', 'banner', 'biography', 'display_name'] as $profileColumn) {
+        foreach (['avatar', 'banner', 'biography', 'display_name', 'last_ip', 'country_code'] as $profileColumn) {
             if (!in_array($profileColumn, array_column($userCols, 'name'), true)) {
                 $pdo->exec("ALTER TABLE users ADD COLUMN $profileColumn TEXT NOT NULL DEFAULT ''");
+            }
+        }
+        $requestCols = array_column($pdo->query('PRAGMA table_info(registration_requests)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+        foreach (['registration_ip', 'country_code'] as $column) {
+            if (!in_array($column, $requestCols, true)) {
+                $pdo->exec("ALTER TABLE registration_requests ADD COLUMN $column TEXT NOT NULL DEFAULT ''");
             }
         }
         $hasBlacklist = false;

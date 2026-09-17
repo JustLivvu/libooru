@@ -53,3 +53,4 @@ define('POST_REPORT_RATE_WINDOW', 3600);
 
 
 define('API_KEY_HEADER', 'X-API-Key');
+define('ACTIVITY_TIMEZONE', 'Europe/Prague');
