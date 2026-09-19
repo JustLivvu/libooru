@@ -62,7 +62,7 @@ class S3Client
     }
 
 
-    public function getPresignedUrl(string $key, int $expires = 3600): string
+    public function getPresignedUrl(string $key, int $expires = 3600, ?int $issuedAt = null): string
     {
         $expires = max(1, min($expires, 604800));
         $url = $this->getUrl($key);
@@ -74,7 +74,7 @@ class S3Client
         $scheme = $parsed['scheme'] ?? 'https';
         $host = $parsed['host'] . (isset($parsed['port']) ? ':' . $parsed['port'] : '');
         $path = $parsed['path'] ?? '/';
-        $time = time();
+        $time = $issuedAt ?? time();
         $amzDate = gmdate('Ymd\THis\Z', $time);
         $dateStamp = gmdate('Ymd', $time);
         $credentialScope = "{$dateStamp}/{$this->region}/s3/aws4_request";

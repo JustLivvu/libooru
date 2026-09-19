@@ -136,6 +136,18 @@ class View
         $faviconVersion = (string)(@filemtime(__DIR__ . '/static/favicon.png') ?: 1);
         $styleVersion = (string)(@filemtime(__DIR__ . '/static/style.css') ?: 1);
         $autocompleteVersion = (string)(@filemtime(__DIR__ . '/static/autocomplete.js') ?: 1);
+        $mediaPreconnect = '';
+        if (self::siteSetting('storage_driver', 'local') === 's3') {
+            $endpoint = self::siteSetting('s3_endpoint');
+            $scheme = (string)(parse_url($endpoint, PHP_URL_SCHEME) ?: 'https');
+            $host = (string)parse_url($endpoint, PHP_URL_HOST);
+            $port = parse_url($endpoint, PHP_URL_PORT);
+            if ($host !== '') {
+                $origin = $scheme . '://' . $host . ($port ? ':' . $port : '');
+                $mediaPreconnect = '<link rel="preconnect" href="' . $e($origin) . '">' . "\n"
+                    . '<link rel="dns-prefetch" href="//' . $e($host) . '">' . "\n";
+            }
+        }
 
         echo <<<HTML
 <!DOCTYPE html>
@@ -160,7 +172,7 @@ class View
 <meta name="twitter:title" content="{$e($fullTitle)}">
 <meta name="twitter:description" content="{$e($description)}">
 <script type="application/ld+json">{$jsonLdJson}</script>
-<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v={$styleVersion}">
+{$mediaPreconnect}<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v={$styleVersion}">
 <script src="{$e(SITE_BASE)}/static/autocomplete.js?v={$autocompleteVersion}" defer></script>
 </head>
 <body>
@@ -336,7 +348,7 @@ HTML;
             return;
         }
         echo '<div class="post-grid">';
-        foreach ($posts as $p) {
+        foreach ($posts as $index => $p) {
             $thumbUrl  = Image::thumbUrl($p['filename']);
             $postUrl   = View::url('/post/' . $p['id']);
             $mime      = $p['mime'] ?? '';
@@ -350,7 +362,9 @@ HTML;
             }
 
             echo '<a href="' . self::e($postUrl) . '" class="post-thumb' . $typeClass . '">';
-            echo '<img src="' . self::e($thumbUrl) . '" alt="post #' . self::e($p['id']) . '" loading="lazy">';
+            $loading = $index < 8 ? 'eager' : 'lazy';
+            $priority = $index < 4 ? 'high' : 'auto';
+            echo '<img src="' . self::e($thumbUrl) . '" alt="post #' . self::e($p['id']) . '" loading="' . $loading . '" fetchpriority="' . $priority . '" decoding="async" width="' . THUMB_WIDTH . '" height="' . THUMB_HEIGHT . '">';
             echo '</a>';
         }
         echo '</div>';

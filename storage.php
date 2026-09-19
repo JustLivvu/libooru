@@ -165,6 +165,20 @@ class Storage
             $filename = pathinfo($filename, PATHINFO_FILENAME) . '.jpg';
         }
 
+        if (self::getDriver() === 's3') {
+            $s3 = self::getS3Client();
+            if ($s3) {
+                // A stable five-minute signing window lets the browser reuse
+                // cached thumbnails while completely bypassing PHP redirects.
+                $issuedAt = intdiv(time(), 300) * 300;
+                return $s3->getPresignedUrl(
+                    self::s3MediaKey('thumbs/' . $filename),
+                    S3_THUMB_URL_TTL,
+                    $issuedAt
+                );
+            }
+        }
+
         return SITE_BASE . '/thumb/' . rawurlencode($filename);
     }
 
