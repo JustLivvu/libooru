@@ -486,6 +486,28 @@ main.full-width {
   font-size: 18px;
 }
 
+.search-help-note {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.tag-color-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tag-color-legend .tag-category-artist { color: var(--tag-artist); }
+.tag-color-legend .tag-category-character { color: var(--tag-character); }
+.tag-color-legend .tag-category-copyright { color: var(--tag-copyright); }
+.tag-color-legend .tag-category-species { color: var(--tag-species); }
+.tag-color-legend .tag-category-meta { color: var(--tag-meta); }
+.tag-color-legend .tag-category-general { color: var(--tag-general); }
+
 .search-help-table {
   overflow: hidden;
   background: var(--bg-card);

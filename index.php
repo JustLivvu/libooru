@@ -966,7 +966,7 @@ function page_search_help(?array $user): void
     echo '<article class="search-help-page">';
     echo '<h1>Search Cheatsheet</h1>';
 
-    echo '<nav class="search-help-toc"><a href="#basics">Basics</a><a href="#sorting">Sorting</a><a href="#rating">Rating & files</a><a href="#size">Size & counts</a><a href="#text">Text & users</a><a href="#dates">Dates</a><a href="#ranges">Ranges</a></nav>';
+    echo '<nav class="search-help-toc"><a href="#basics">Basics</a><a href="#species">Species & tag colors</a><a href="#sorting">Sorting</a><a href="#rating">Rating & files</a><a href="#size">Size & counts</a><a href="#text">Text & users</a><a href="#dates">Dates</a><a href="#ranges">Ranges</a></nav>';
 
     echo '<section id="basics"><h2>Basics</h2><div class="search-help-table">';
     echo $row('1girl long_hair', 'Posts tagged with both <code>1girl</code> and <code>long_hair</code>. Separate tags with spaces.');
@@ -975,6 +975,26 @@ function page_search_help(?array $user): void
     echo $row('blonde_*', 'Wildcard search: match any tag beginning with <code>blonde_</code>. <code>*hair</code> and <code>*hair*</code> also work.');
     echo $row('( ~brown_hair ~black_hair ) ( ~1girl ~1boy )', 'Require one hair-color tag and one character-count tag. Keep spaces around parentheses.');
     echo $row('boobs', 'Aliases resolve automatically; this example searches for the canonical tag <code>breasts</code>.');
+    echo '</div></section>';
+
+    echo '<section id="species"><h2>Species and tag colors</h2>';
+    echo '<p class="search-help-note"><strong>Species</strong> means the animal or creature shown in a post. Species tags are green. Search using the actual species name, such as <code>wolf</code>, <code>fox</code>, or <code>canine</code> — do not add <code>species:</code> before it.</p>';
+    echo '<div class="search-help-table">';
+    echo $row('wolf type:image', 'Photos and images tagged <code>wolf</code>. Replace <code>wolf</code> with any species name.');
+    echo $row('wolf type:video', 'Videos tagged <code>wolf</code>. This includes MP4, WebM, and MOV files.');
+    echo $row('fox canine', 'Posts that contain both species tags.');
+    echo $row('~wolf ~fox type:image', 'Images containing either <code>wolf</code> or <code>fox</code>.');
+    echo $row('canine -wolf', 'Canine posts that are not tagged <code>wolf</code>.');
+    echo '</div>';
+    echo '<h3>Adding species while uploading</h3>';
+    echo '<p class="search-help-note">When posting an image or video, enter the species as a normal space-separated tag in the <strong>Tags</strong> field: <code>wolf blue_eyes solo</code>. Known species are classified automatically and appear green after upload.</p>';
+    echo '<div class="tag-color-legend" aria-label="Tag color legend">';
+    echo '<span class="tag-category-artist">Artist / model</span>';
+    echo '<span class="tag-category-character">Character</span>';
+    echo '<span class="tag-category-copyright">Copyright</span>';
+    echo '<span class="tag-category-species">Species</span>';
+    echo '<span class="tag-category-meta">Meta</span>';
+    echo '<span class="tag-category-general">General</span>';
     echo '</div></section>';
 
     echo '<section id="sorting"><h2>Sorting and result limit</h2><div class="search-help-table">';
