@@ -71,6 +71,13 @@ class DB
                 count INTEGER NOT NULL DEFAULT 0
             );
 
+            CREATE TABLE IF NOT EXISTS tag_aliases (
+                alias     TEXT PRIMARY KEY COLLATE NOCASE,
+                canonical TEXT NOT NULL COLLATE NOCASE,
+                CHECK (alias <> canonical)
+            );
+            CREATE INDEX IF NOT EXISTS idx_tag_aliases_canonical ON tag_aliases(canonical);
+
             CREATE TABLE IF NOT EXISTS post_tags (
                 post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
                 tag_id  INTEGER NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,
@@ -276,38 +283,97 @@ class DB
             }
         }
 
-        $canonicalTagIds = [];
-        $pdo->beginTransaction();
-        try {
-            foreach (TAG_ALIASES as $alias => $canonical) {
-                $aliasQuery = $pdo->prepare('SELECT id FROM tags WHERE name = ? COLLATE NOCASE');
-                $aliasQuery->execute([$alias]);
-                $aliasId = $aliasQuery->fetchColumn();
-                if ($aliasId === false) continue;
-
-                $insertCanonical = $pdo->prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)');
-                $insertCanonical->execute([$canonical]);
-                $canonicalQuery = $pdo->prepare('SELECT id FROM tags WHERE name = ? COLLATE NOCASE');
-                $canonicalQuery->execute([$canonical]);
-                $canonicalId = (int)$canonicalQuery->fetchColumn();
-
-                $merge = $pdo->prepare('INSERT OR IGNORE INTO post_tags (post_id, tag_id) SELECT post_id, ? FROM post_tags WHERE tag_id = ?');
-                $merge->execute([$canonicalId, (int)$aliasId]);
-                $deleteLinks = $pdo->prepare('DELETE FROM post_tags WHERE tag_id = ?');
-                $deleteLinks->execute([(int)$aliasId]);
-                $deleteAlias = $pdo->prepare('DELETE FROM tags WHERE id = ?');
-                $deleteAlias->execute([(int)$aliasId]);
-                $canonicalTagIds[$canonicalId] = true;
-            }
-            $refreshCount = $pdo->prepare('UPDATE tags SET count = (SELECT COUNT(*) FROM post_tags WHERE tag_id = ?) WHERE id = ?');
-            foreach (array_keys($canonicalTagIds) as $canonicalId) {
-                $refreshCount->execute([$canonicalId, $canonicalId]);
-            }
-            $pdo->commit();
-        } catch (Throwable $e) {
-            $pdo->rollBack();
-            throw $e;
+        // Keep aliases as data, so autocomplete and every importer can use the
+        // same registry even after the duplicate tag itself has been removed.
+        $saveAlias = $pdo->prepare('INSERT INTO tag_aliases (alias, canonical) VALUES (?, ?)
+                                    ON CONFLICT(alias) DO UPDATE SET canonical = excluded.canonical
+                                    WHERE tag_aliases.canonical <> excluded.canonical');
+        foreach (TAG_ALIASES as $alias => $canonical) {
+            if (strcasecmp($alias, $canonical) !== 0) $saveAlias->execute([$alias, $canonical]);
         }
+
+        // Separator-only variants are safe duplicates: close-up, close_up and
+        // closeup describe the same tag. Prefer the most-used spelling.
+        $currentTagMaxId = (string)($pdo->query('SELECT COALESCE(MAX(id), 0) FROM tags')->fetchColumn() ?: '0');
+        $lastSeparatorScan = (string)($pdo->query("SELECT value FROM site_settings WHERE key = 'tag_alias_separator_scan_max_id'")->fetchColumn() ?: '');
+        if ($currentTagMaxId !== $lastSeparatorScan) {
+            $separatorGroups = [];
+            foreach ($pdo->query('SELECT name, count FROM tags')->fetchAll(PDO::FETCH_ASSOC) as $tag) {
+                $key = strtolower((string)preg_replace('/[-_\s]+/', '', $tag['name']));
+                if ($key !== '') $separatorGroups[$key][] = $tag;
+            }
+            $saveDiscoveredAlias = $pdo->prepare('INSERT OR IGNORE INTO tag_aliases (alias, canonical) VALUES (?, ?)');
+            foreach ($separatorGroups as $group) {
+                if (count($group) < 2) continue;
+                usort($group, static fn(array $a, array $b): int => ((int)$b['count'] <=> (int)$a['count']) ?: (strlen($a['name']) <=> strlen($b['name'])));
+                $canonical = $group[0]['name'];
+                foreach (array_slice($group, 1) as $duplicate) {
+                    if (strcasecmp($duplicate['name'], $canonical) !== 0) {
+                        $saveDiscoveredAlias->execute([$duplicate['name'], $canonical]);
+                    }
+                }
+            }
+        }
+
+        // Collapse chains such as self_pic -> selfpic -> selfie so migration
+        // never recreates an intermediate alias as if it were canonical.
+        $aliasMap = [];
+        foreach ($pdo->query('SELECT alias, canonical FROM tag_aliases')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $aliasMap[strtolower($row['alias'])] = strtolower($row['canonical']);
+        }
+        $flattenAlias = $pdo->prepare('UPDATE tag_aliases SET canonical = ? WHERE alias = ? COLLATE NOCASE');
+        foreach ($aliasMap as $alias => $canonical) {
+            $originalCanonical = $canonical;
+            $seen = [$alias => true];
+            while (isset($aliasMap[$canonical]) && !isset($seen[$canonical])) {
+                $seen[$canonical] = true;
+                $canonical = $aliasMap[$canonical];
+            }
+            if (!isset($seen[$canonical]) && $canonical !== $originalCanonical) {
+                $flattenAlias->execute([$canonical, $alias]);
+            }
+        }
+
+        $hasAliasTags = (bool)$pdo->query("SELECT EXISTS(
+            SELECT 1 FROM tags t INNER JOIN tag_aliases a ON a.alias = t.name COLLATE NOCASE
+        )")->fetchColumn();
+        if ($hasAliasTags) {
+            $pdo->beginTransaction();
+            try {
+            $pdo->exec("INSERT OR IGNORE INTO tags (name)
+                        SELECT DISTINCT a.canonical
+                        FROM tag_aliases a
+                        INNER JOIN tags old ON old.name = a.alias COLLATE NOCASE");
+            $pdo->exec("INSERT OR IGNORE INTO post_tags (post_id, tag_id)
+                        SELECT pt.post_id, canonical.id
+                        FROM post_tags pt
+                        INNER JOIN tags old ON old.id = pt.tag_id
+                        INNER JOIN tag_aliases a ON a.alias = old.name COLLATE NOCASE
+                        INNER JOIN tags canonical ON canonical.name = a.canonical COLLATE NOCASE");
+            $pdo->exec("DELETE FROM post_tags
+                        WHERE tag_id IN (
+                            SELECT old.id FROM tags old
+                            INNER JOIN tag_aliases a ON a.alias = old.name COLLATE NOCASE
+                        )");
+            $pdo->exec("DELETE FROM tags
+                        WHERE id IN (
+                            SELECT old.id FROM tags old
+                            INNER JOIN tag_aliases a ON a.alias = old.name COLLATE NOCASE
+                        )");
+            $pdo->exec("UPDATE tags
+                        SET count = (SELECT COUNT(*) FROM post_tags WHERE tag_id = tags.id)
+                        WHERE name IN (SELECT canonical FROM tag_aliases)");
+                $pdo->commit();
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+        }
+        $finalTagMaxId = (string)($pdo->query('SELECT COALESCE(MAX(id), 0) FROM tags')->fetchColumn() ?: '0');
+        $saveSeparatorScan = $pdo->prepare("INSERT INTO site_settings (key, value) VALUES ('tag_alias_separator_scan_max_id', ?)
+                                            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                                            WHERE site_settings.value <> excluded.value");
+        $saveSeparatorScan->execute([$finalTagMaxId]);
 
         $missingE621Artwork = (bool)$pdo->query("
             SELECT EXISTS(

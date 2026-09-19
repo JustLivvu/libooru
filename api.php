@@ -219,7 +219,7 @@ class Api
         $page   = max(1, (int)($_GET['page'] ?? 1));
         $limit  = min(200, max(1, (int)($_GET['limit'] ?? 50)));
         $q      = trim($_GET['q'] ?? '');
-        if (isset(TAG_ALIASES[strtolower($q)])) $q = TAG_ALIASES[strtolower($q)];
+        $q = Post::canonicalTagName($q);
         $offset = ($page - 1) * $limit;
 
         $user = Auth::current();
@@ -282,13 +282,18 @@ class Api
 
         // Aliases participate in autocomplete, but the UI always shows the
         // canonical tag first. For example: "but", "butt" and "booty" suggest "ass".
-        $aliasTargets = Post::aliasTargetsForQuery($q);
-        if ($aliasTargets) {
-            $aliasPlaceholders = implode(',', array_fill(0, count($aliasTargets), '?'));
-            $aliasSql = 'SELECT name, count FROM tags
-                         WHERE name IN (' . $aliasPlaceholders . ')' . $notInSql . '
-                         ORDER BY count DESC';
-            $aliasRows = DB::rows($aliasSql, array_merge($aliasTargets, $notInParams));
+        $aliasNotInSql = '';
+        if ($blacklisted) {
+            $aliasNotInPlaceholders = implode(',', array_fill(0, count($blacklisted), '?'));
+            $aliasNotInSql = " AND canonical.name NOT IN ($aliasNotInPlaceholders) COLLATE NOCASE";
+        }
+        $aliasSql = 'SELECT canonical.name, canonical.count, aliases.alias
+                     FROM tag_aliases aliases
+                     INNER JOIN tags canonical ON canonical.name = aliases.canonical COLLATE NOCASE
+                     WHERE aliases.alias = ? COLLATE NOCASE' . $aliasNotInSql . '
+                     LIMIT 1';
+        $aliasRows = DB::rows($aliasSql, array_merge([$q], $notInParams));
+        if ($aliasRows) {
             foreach ($aliasRows as $tag) {
                 $key = strtolower($tag['name']);
                 if (!isset($byName[$key]) && count($byName) < $limit) {

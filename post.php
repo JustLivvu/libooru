@@ -17,7 +17,14 @@ class Post
     public static function canonicalTagName(string $tag): string
     {
         $name = strtolower((string)preg_replace('/\s+/', '_', trim($tag)));
-        return TAG_ALIASES[$name] ?? $name;
+        static $aliases = null;
+        if ($aliases === null) {
+            $aliases = TAG_ALIASES;
+            foreach (DB::rows('SELECT alias, canonical FROM tag_aliases') as $alias) {
+                $aliases[strtolower($alias['alias'])] = strtolower($alias['canonical']);
+            }
+        }
+        return $aliases[$name] ?? $name;
     }
 
     public static function canonicalizeTags(array $tags): array
@@ -33,13 +40,10 @@ class Post
         $needle = strtolower((string)preg_replace('/\s+/', '_', trim($query)));
         if ($needle === '') return [];
 
-        $targets = [];
-        foreach (TAG_ALIASES as $alias => $canonical) {
-            if (str_starts_with($alias, $needle)) {
-                $targets[] = $canonical;
-            }
-        }
-        return array_values(array_unique($targets));
+        return array_values(array_unique(array_column(
+            DB::rows('SELECT canonical FROM tag_aliases WHERE alias LIKE ? ORDER BY alias', [$needle . '%']),
+            'canonical'
+        )));
     }
 
 

@@ -56,6 +56,7 @@ class Database:
         self.lock = threading.Lock()
         self.existing_post_ids = set()
         self.existing_md5s = set()
+        self.tag_aliases = dict(TAG_ALIASES)
         try:
             import sqlite3
             self.conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
@@ -65,6 +66,7 @@ class Database:
         except Exception:
             self.use_native = False
         self._init_db_schema()
+        self._load_tag_aliases()
         self._load_existing_cache()
 
     def _exec_php_sql(self, code, args=()):
@@ -109,6 +111,12 @@ class Database:
             count INTEGER NOT NULL DEFAULT 0
         );
 
+        CREATE TABLE IF NOT EXISTS tag_aliases (
+            alias     TEXT PRIMARY KEY COLLATE NOCASE,
+            canonical TEXT NOT NULL COLLATE NOCASE,
+            CHECK (alias <> canonical)
+        );
+
         CREATE TABLE IF NOT EXISTS post_tags (
             post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
             tag_id  INTEGER NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,
@@ -126,6 +134,16 @@ class Database:
             with self.lock:
                 code = "$db->exec($argv[2]);"
                 self._exec_php_sql(code, [sql])
+
+    def _load_tag_aliases(self):
+        """Load the shared alias registry maintained by the PHP migration."""
+        with self.lock:
+            if self.use_native:
+                rows = self.conn.execute("SELECT alias, canonical FROM tag_aliases").fetchall()
+            else:
+                code = "echo json_encode($db->query('SELECT alias, canonical FROM tag_aliases')->fetchAll(PDO::FETCH_ASSOC));"
+                rows = [(row['alias'], row['canonical']) for row in json.loads(self._exec_php_sql(code) or '[]')]
+        self.tag_aliases.update((alias.lower(), canonical.lower()) for alias, canonical in rows)
 
     def _load_existing_cache(self):
         self.existing_post_ids.clear()
@@ -228,7 +246,7 @@ class Database:
             post_data['quality'] = determine_quality(post_data.get('width'), post_data.get('height'))
 
         cleaned_tags = sorted(set(
-            TAG_ALIASES.get(name, name)
+            self.tag_aliases.get(name, name)
             for name in (re.sub(r'\s+', '_', t.strip().lower()) for t in tags if t.strip())
         ))
 

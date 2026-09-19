@@ -804,7 +804,7 @@ function page_tags(?array $user): void
 {
     $page   = max(1, (int)($_GET['page'] ?? 1));
     $q      = trim($_GET['q'] ?? '');
-    if (isset(TAG_ALIASES[strtolower($q)])) $q = TAG_ALIASES[strtolower($q)];
+    $q = Post::canonicalTagName($q);
     $limit  = 50;
     $offset = ($page - 1) * $limit;
 

@@ -59,7 +59,23 @@
       li.dataset.value = tag.name;
 
       const nameSpan = document.createElement('span');
-      nameSpan.textContent = tag.name;
+      if (tag.alias && tag.alias.toLowerCase() !== tag.name.toLowerCase()) {
+        const aliasSpan = document.createElement('span');
+        aliasSpan.textContent = tag.alias;
+
+        const arrowSpan = document.createElement('span');
+        arrowSpan.textContent = ' → ';
+        arrowSpan.style.cssText = 'color:var(--muted-text,#888);padding:0 3px';
+
+        const canonicalSpan = document.createElement('strong');
+        canonicalSpan.textContent = tag.name;
+
+        nameSpan.appendChild(aliasSpan);
+        nameSpan.appendChild(arrowSpan);
+        nameSpan.appendChild(canonicalSpan);
+      } else {
+        nameSpan.textContent = tag.name;
+      }
 
       const countSpan = document.createElement('span');
       countSpan.textContent = formatCount(tag.count);
