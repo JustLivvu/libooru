@@ -310,4 +310,4 @@ data/                     runtime state; never deploy from Git
 
 ## License
 
-No license file is currently included. Unless the repository owner adds one, copyright law reserves all rights.
+Released under the [MIT License](LICENSE).
