@@ -201,6 +201,11 @@ class Post
 
     public static function upload(array $file, array $meta): int
     {
+        $contentType = $meta['content_type'] ?? null;
+        if ($contentType === 'drawn') $contentType = 'artwork';
+        if ($contentType !== null && !in_array($contentType, ['artwork', 'real_life'], true)) {
+            throw new RuntimeException('Invalid content type.');
+        }
         if ($file['error'] !== UPLOAD_ERR_OK) {
             throw new RuntimeException(self::uploadError($file['error']));
         }
@@ -275,6 +280,13 @@ class Post
         $postId = (int)DB::lastId();
 
         $tags = preg_split('/[\s,]+/', trim($meta['tags'] ?? ''), -1, PREG_SPLIT_NO_EMPTY);
+        if ($contentType !== null) {
+            $tags = array_values(array_filter(
+                $tags,
+                fn($tag) => !in_array(strtolower($tag), ['drawn', 'artwork', 'real_life'], true)
+            ));
+            $tags[] = $contentType;
+        }
         if ($tags) self::setTags($postId, $tags);
 
         try {

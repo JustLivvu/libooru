@@ -25,7 +25,7 @@ function realbooruTagsFromHtml(string $html): array
             $tags[] = urldecode($tag);
         }
     }
-    $tags[] = 'realbooru';
+    $tags[] = 'real_life';
     return array_values(array_unique($tags));
 }
 

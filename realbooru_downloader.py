@@ -2,7 +2,7 @@
 """
 Realbooru Downloader
 Pobiera posty z realbooru.com (obrazki oraz wideo MP4/WebM), zapisuje pliki i miniaturki,
-oraz dodaje wpisy do bazy danych SQLite (w tym automatyczny dodatek tagu 'realbooru').
+oraz dodaje wpisy do bazy danych SQLite (w tym automatyczny dodatek tagu 'real_life').
 Obsługuje wielowątkowość dla szybkiego pobierania bez limitów stron.
 """
 
@@ -462,7 +462,7 @@ class RealbooruDownloader:
     BASE_URL = "https://realbooru.com/index.php"
     USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-    def __init__(self, tag="femboy", extra_tag="realbooru", limit=0, threads=10, db_path="data/libooru.db", data_dir="data", max_consecutive_skips=100, api_url="http://localhost:3000/api/v1", api_key="", use_api=True, reset_cache=False):
+    def __init__(self, tag="femboy", extra_tag="real_life", limit=0, threads=10, db_path="data/libooru.db", data_dir="data", max_consecutive_skips=100, api_url="http://localhost:3000/api/v1", api_key="", use_api=True, reset_cache=False):
         self.tag = tag
         self.extra_tag = extra_tag
         self.limit = limit
@@ -793,7 +793,7 @@ class RealbooruDownloader:
 def main():
     parser = argparse.ArgumentParser(description="Downloader postów z Realbooru.com do bazy danych")
     parser.add_argument("--tag", default="femboy", help="Tag do wyszukania na Realbooru (domyślnie: femboy)")
-    parser.add_argument("--extra-tag", default="realbooru", help="Dodatkowy tag dopisywany do każdego posta (domyślnie: realbooru)")
+    parser.add_argument("--extra-tag", default="real_life", help="Dodatkowy tag dopisywany do każdego posta (domyślnie: real_life)")
     parser.add_argument("--limit", type=int, default=0, help="Liczba postów do pobrania (domyślnie: 0 = pobierz wszystkie)")
     parser.add_argument("--threads", type=int, default=10, help="Liczba wątków (domyślnie: 10)")
     parser.add_argument("--db", default="data/libooru.db", help="Ścieżka do bazy SQLite (domyślnie: data/libooru.db)")

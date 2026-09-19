@@ -150,6 +150,12 @@ class DB
             CREATE INDEX IF NOT EXISTS idx_login_events_created_user ON login_events(created_at, user_id);
             CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id);
 
+            CREATE TABLE IF NOT EXISTS post_browsing_events (
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                ip TEXT NOT NULL,
+                PRIMARY KEY (created_at, ip)
+            );
+
             CREATE TABLE IF NOT EXISTS ip_country_cache (
                 ip TEXT PRIMARY KEY,
                 country_code TEXT NOT NULL DEFAULT '',
@@ -208,6 +214,50 @@ class DB
             $pdo->exec("ALTER TABLE posts ADD COLUMN quality TEXT NOT NULL DEFAULT 'medium'");
         }
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_quality ON posts(quality)');
+
+        // The old source-specific classification is now the general real-life tag.
+        // Merge associations when real_life already exists, then refresh its count.
+        $legacyRealbooruId = $pdo->query("SELECT id FROM tags WHERE name = 'realbooru' COLLATE NOCASE")->fetchColumn();
+        if ($legacyRealbooruId !== false) {
+            $pdo->beginTransaction();
+            try {
+                $pdo->exec("INSERT OR IGNORE INTO tags (name) VALUES ('real_life')");
+                $realLifeId = (int)$pdo->query("SELECT id FROM tags WHERE name = 'real_life' COLLATE NOCASE")->fetchColumn();
+                $merge = $pdo->prepare('INSERT OR IGNORE INTO post_tags (post_id, tag_id) SELECT post_id, ? FROM post_tags WHERE tag_id = ?');
+                $merge->execute([$realLifeId, (int)$legacyRealbooruId]);
+                $deleteLinks = $pdo->prepare('DELETE FROM post_tags WHERE tag_id = ?');
+                $deleteLinks->execute([(int)$legacyRealbooruId]);
+                $deleteTag = $pdo->prepare('DELETE FROM tags WHERE id = ?');
+                $deleteTag->execute([(int)$legacyRealbooruId]);
+                $refreshCount = $pdo->prepare('UPDATE tags SET count = (SELECT COUNT(*) FROM post_tags WHERE tag_id = ?) WHERE id = ?');
+                $refreshCount->execute([$realLifeId, $realLifeId]);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+        }
+
+        $legacyDrawnId = $pdo->query("SELECT id FROM tags WHERE name = 'drawn' COLLATE NOCASE")->fetchColumn();
+        if ($legacyDrawnId !== false) {
+            $pdo->beginTransaction();
+            try {
+                $pdo->exec("INSERT OR IGNORE INTO tags (name) VALUES ('artwork')");
+                $artworkId = (int)$pdo->query("SELECT id FROM tags WHERE name = 'artwork' COLLATE NOCASE")->fetchColumn();
+                $merge = $pdo->prepare('INSERT OR IGNORE INTO post_tags (post_id, tag_id) SELECT post_id, ? FROM post_tags WHERE tag_id = ?');
+                $merge->execute([$artworkId, (int)$legacyDrawnId]);
+                $deleteLinks = $pdo->prepare('DELETE FROM post_tags WHERE tag_id = ?');
+                $deleteLinks->execute([(int)$legacyDrawnId]);
+                $deleteTag = $pdo->prepare('DELETE FROM tags WHERE id = ?');
+                $deleteTag->execute([(int)$legacyDrawnId]);
+                $refreshCount = $pdo->prepare('UPDATE tags SET count = (SELECT COUNT(*) FROM post_tags WHERE tag_id = ?) WHERE id = ?');
+                $refreshCount->execute([$artworkId, $artworkId]);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+        }
 
 
         $pdo->exec("

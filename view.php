@@ -133,6 +133,8 @@ class View
         } else {
             $brand = $e($siteName);
         }
+        $styleVersion = (string)(@filemtime(__DIR__ . '/static/style.css') ?: 1);
+        $autocompleteVersion = (string)(@filemtime(__DIR__ . '/static/autocomplete.js') ?: 1);
 
         echo <<<HTML
 <!DOCTYPE html>
@@ -157,8 +159,8 @@ class View
 <meta name="twitter:title" content="{$e($fullTitle)}">
 <meta name="twitter:description" content="{$e($description)}">
 <script type="application/ld+json">{$jsonLdJson}</script>
-<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v=20">
-<script src="{$e(SITE_BASE)}/static/autocomplete.js" defer></script>
+<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v={$styleVersion}">
+<script src="{$e(SITE_BASE)}/static/autocomplete.js?v={$autocompleteVersion}" defer></script>
 </head>
 <body>
 HTML;

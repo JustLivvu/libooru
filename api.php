@@ -175,10 +175,11 @@ class Api
             throw new RuntimeException('No file uploaded', 400);
         }
         $meta = [
-            'tags'   => $_POST['tags']   ?? '',
-            'rating' => $_POST['rating'] ?? 'q',
-            'source' => $_POST['source'] ?? '',
-            'title'  => $_POST['title']  ?? '',
+            'tags'         => $_POST['tags']         ?? '',
+            'rating'       => $_POST['rating']       ?? 'q',
+            'source'       => $_POST['source']       ?? '',
+            'title'        => $_POST['title']        ?? '',
+            'content_type' => $_POST['content_type'] ?? null,
         ];
         $id = Post::upload($_FILES['file'], $meta);
         http_response_code(201);

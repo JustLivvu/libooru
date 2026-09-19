@@ -426,6 +426,7 @@ function page_posts(?array $user): void
 
     $tags   = $q ? preg_split('/[\s,]+/', $q, -1, PREG_SPLIT_NO_EMPTY) : [];
     $result = Post::list($page, POSTS_PER_PAGE, $tags, $rating, $order, $quality);
+    Activity::recordPostBrowsing();
 
     $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 50');
 
@@ -489,6 +490,7 @@ function page_post(?array $user, int $id): void
             return;
         }
     }
+    Activity::recordPostBrowsing();
     $comments = Post::commentsFor($id);
     $tags     = $post['tags'];
 
@@ -781,6 +783,10 @@ function page_upload(?array $user, string $method): void
     $maxMb = MAX_FILE_SIZE / 1024 / 1024;
     echo '<label><span>Image/Video <small>(JPEG, PNG, GIF, WebP, MP4, WebM — max ' . $maxMb . ' MB)</small></span>';
     echo '<input type="file" name="file" accept="image/*,video/mp4,video/webm" required></label>';
+    echo '<fieldset class="upload-content-type"><legend>Content type</legend><div>';
+    echo '<label><input type="radio" name="content_type" value="artwork" checked><span>Artwork</span></label>';
+    echo '<label><input type="radio" name="content_type" value="real_life"><span>Real Life</span></label>';
+    echo '</div></fieldset>';
     echo '<label><span>Tags <small>(space-separated)</small></span><input name="tags" placeholder="character:foo artist:bar general_tag"></label>';
     echo '<label class="upload-rating"><span>Rating</span><select name="rating">';
     foreach (['s' => 'Safe', 'q' => 'Questionable', 'e' => 'Explicit'] as $v => $l) {
@@ -1296,30 +1302,33 @@ function page_scraper(?array $user, string $method): void
     View::footer();
 }
 
-function renderLoginActivity(): void
+function renderActivityStatistics(bool $browsing = false): void
 {
-    $activity = Activity::statistics();
-    echo '<h3>Login activity</h3><div class="activity-counts">';
+    $activity = $browsing ? Activity::browsingStatistics() : Activity::statistics();
+    $unit = $browsing ? 'unique IP addresses' : 'unique users';
+    $graphId = $browsing ? 'browsing' : 'login';
+    $description = $browsing ? 'Unique IP addresses browsing the post list or individual posts' : 'Unique users with successful logins';
+    echo '<h3>' . ($browsing ? 'Post browsing activity' : 'Login activity') . '</h3><div class="activity-counts">';
     foreach (['today' => 'Today', 'last_12h' => 'Last 12 hours', 'last_6h' => 'Last 6 hours', 'last_1h' => 'Last hour'] as $key => $label) {
-        echo '<div class="activity-count"><span>' . $label . '</span><strong>' . $activity['counts'][$key] . '</strong><small>unique users</small></div>';
+        echo '<div class="activity-count"><span>' . $label . '</span><strong>' . $activity['counts'][$key] . '</strong><small>' . $unit . '</small></div>';
     }
     echo '</div><h3>Activity graph</h3>';
-    echo '<p class="activity-note">Unique users with successful logins in each hour of the last 24 hours. Today starts at midnight in ' . View::e(ACTIVITY_TIMEZONE) . '. Recording starts when this feature is enabled.</p>';
+    echo '<p class="activity-note">' . $description . ' in each hour of the last 24 hours. Today starts at midnight in ' . View::e(ACTIVITY_TIMEZONE) . '. Recording starts when this feature is enabled.</p>';
     $max = max(1, max(array_column($activity['hours'], 'users')));
-    echo '<div class="activity-chart"><svg viewBox="0 0 960 240" role="img" aria-labelledby="login-graph-title login-graph-description">';
-    echo '<title id="login-graph-title">Unique users logging in during the last 24 hours</title><desc id="login-graph-description">Hourly login activity. Exact counts and times are available in the table below.</desc>';
+    echo '<div class="activity-chart"><svg viewBox="0 0 960 240" role="img" aria-labelledby="' . $graphId . '-graph-title ' . $graphId . '-graph-description">';
+    echo '<title id="' . $graphId . '-graph-title">' . $description . ' during the last 24 hours</title><desc id="' . $graphId . '-graph-description">Exact hourly counts and times are available in the table below.</desc>';
     echo '<line x1="40" y1="200" x2="952" y2="200" class="activity-grid" />';
     echo '<line x1="40" y1="30" x2="952" y2="30" class="activity-grid" />';
     echo '<text x="30" y="204" text-anchor="end">0</text><text x="30" y="34" text-anchor="end">' . $max . '</text>';
     foreach ($activity['hours'] as $i => $hour) {
         $x = 44 + $i * 38;
         $height = round($hour['users'] / $max * 170, 2);
-        echo '<rect class="activity-bar" x="' . $x . '" y="' . (200 - $height) . '" width="28" height="' . $height . '" rx="3"><title>' . View::e($hour['label']) . ': ' . $hour['users'] . ' unique users</title></rect>';
+        echo '<rect class="activity-bar" x="' . $x . '" y="' . (200 - $height) . '" width="28" height="' . $height . '" rx="3"><title>' . View::e($hour['label']) . ': ' . $hour['users'] . ' ' . $unit . '</title></rect>';
         if ($hour['users'] > 0) echo '<text x="' . ($x + 14) . '" y="' . (192 - $height) . '" text-anchor="middle">' . $hour['users'] . '</text>';
     }
     echo '<text x="44" y="228">24 hours ago</text><text x="500" y="228" text-anchor="middle">12 hours ago</text><text x="952" y="228" text-anchor="end">Now</text></svg></div>';
-    if (array_sum(array_column($activity['hours'], 'users')) === 0) echo '<p class="activity-note">No successful logins in the last 24 hours.</p>';
-    echo '<details class="activity-hourly"><summary>Hourly details</summary><div style="overflow-x:auto"><table><thead><tr><th>Time (' . View::e(ACTIVITY_TIMEZONE) . ')</th><th>Unique users</th></tr></thead><tbody>';
+    if (array_sum(array_column($activity['hours'], 'users')) === 0) echo '<p class="activity-note">' . ($browsing ? 'No post browsing' : 'No successful logins') . ' in the last 24 hours.</p>';
+    echo '<details class="activity-hourly"><summary>Hourly details</summary><div style="overflow-x:auto"><table><thead><tr><th>Time (' . View::e(ACTIVITY_TIMEZONE) . ')</th><th>' . ucfirst($unit) . '</th></tr></thead><tbody>';
     foreach ($activity['hours'] as $hour) echo '<tr><td>' . View::e($hour['label']) . '</td><td>' . $hour['users'] . '</td></tr>';
     echo '</tbody></table></div></details>';
 }
@@ -1694,7 +1703,8 @@ function page_admin(?array $user, string $method): void
     echo '<tr><th style="text-align:left; padding:8px;">Users</th><td style="padding:8px;">' . count($users) . '</td></tr>';
     echo '</tbody>';
     echo '</table>';
-    renderLoginActivity();
+    renderActivityStatistics();
+    renderActivityStatistics(true);
     echo '</div></details>';
     }
 

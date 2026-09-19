@@ -178,7 +178,7 @@ while (true) {
                 $tags[] = urldecode($t);
             }
         }
-        $tags[] = 'realbooru';
+        $tags[] = 'real_life';
         $tagStr = implode(' ', array_unique($tags));
 
         $rating = 'q';

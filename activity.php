@@ -61,21 +61,45 @@ class Activity
             . mb_chr(0x1F1E6 + ord($code[1]) - 65, 'UTF-8');
     }
 
+    public static function recordPostBrowsing(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') return;
+        $ip = self::requestIp();
+        if ($ip === '') return;
+        // Canonicalize IPv6 spelling so equivalent addresses count as the same visitor.
+        $packed = inet_pton($ip);
+        if (strlen($packed) === 16 && substr($packed, 0, 12) === str_repeat("\0", 10) . "\xff\xff") {
+            $packed = substr($packed, 12);
+        }
+        $ip = inet_ntop($packed);
+        DB::exec('INSERT OR IGNORE INTO post_browsing_events (ip) VALUES (?)', [$ip]);
+    }
+
     public static function statistics(?int $now = null): array
+    {
+        return self::summarize('login_events', 'user_id', $now);
+    }
+
+    public static function browsingStatistics(?int $now = null): array
+    {
+        return self::summarize('post_browsing_events', 'ip', $now);
+    }
+
+    private static function summarize(string $table, string $identity, ?int $now): array
     {
         $now ??= time();
         $timezone = new DateTimeZone(ACTIVITY_TIMEZONE);
         $today = (new DateTimeImmutable('@' . $now))->setTimezone($timezone)->setTime(0, 0)->getTimestamp();
-        $counts = DB::row('SELECT
-            COUNT(DISTINCT CASE WHEN created_at >= ? THEN user_id END) AS today,
-            COUNT(DISTINCT CASE WHEN created_at >= ? THEN user_id END) AS last_12h,
-            COUNT(DISTINCT CASE WHEN created_at >= ? THEN user_id END) AS last_6h,
-            COUNT(DISTINCT CASE WHEN created_at >= ? THEN user_id END) AS last_1h
-            FROM login_events WHERE created_at >= ? AND created_at <= ?',
+        $counts = DB::row("SELECT
+            COUNT(DISTINCT CASE WHEN created_at >= ? THEN $identity END) AS today,
+            COUNT(DISTINCT CASE WHEN created_at >= ? THEN $identity END) AS last_12h,
+            COUNT(DISTINCT CASE WHEN created_at >= ? THEN $identity END) AS last_6h,
+            COUNT(DISTINCT CASE WHEN created_at >= ? THEN $identity END) AS last_1h
+            FROM $table WHERE created_at >= ? AND created_at <= ?",
             [$today, $now - 43200, $now - 21600, $now - 3600, min($today, $now - 43200), $now]);
         $start = $now - 86400;
-        $rows = DB::rows('SELECT min(23, CAST((created_at - ?) / 3600 AS INTEGER)) AS bucket, COUNT(DISTINCT user_id) AS users
-            FROM login_events WHERE created_at >= ? AND created_at <= ? GROUP BY bucket', [$start, $start, $now]);
+        $rows = DB::rows("SELECT min(23, CAST((created_at - ?) / 3600 AS INTEGER)) AS bucket, COUNT(DISTINCT $identity) AS users
+            FROM $table WHERE created_at >= ? AND created_at <= ? GROUP BY bucket", [$start, $start, $now]);
         $buckets = array_column($rows, 'users', 'bucket');
         $hours = [];
         for ($i = 0; $i < 24; $i++) {
