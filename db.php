@@ -96,9 +96,19 @@ class DB
             CREATE TABLE IF NOT EXISTS scraper_tasks (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 tag        TEXT NOT NULL,
+                source     TEXT NOT NULL DEFAULT 'realbooru',
+                blacklist  TEXT NOT NULL DEFAULT '',
                 pid        INTEGER,
                 status     TEXT NOT NULL DEFAULT 'running',
                 created_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+
+            CREATE TABLE IF NOT EXISTS scraper_progress (
+                source     TEXT NOT NULL,
+                tag        TEXT NOT NULL COLLATE NOCASE,
+                next_pid   INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (source, tag)
             );
 
             CREATE TABLE IF NOT EXISTS favorites (
@@ -187,6 +197,13 @@ class DB
                 $pdo->exec("ALTER TABLE registration_requests ADD COLUMN $column TEXT NOT NULL DEFAULT ''");
             }
         }
+        $taskCols = array_column($pdo->query('PRAGMA table_info(scraper_tasks)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+        if (!in_array('source', $taskCols, true)) {
+            $pdo->exec("ALTER TABLE scraper_tasks ADD COLUMN source TEXT NOT NULL DEFAULT 'realbooru'");
+        }
+        if (!in_array('blacklist', $taskCols, true)) {
+            $pdo->exec("ALTER TABLE scraper_tasks ADD COLUMN blacklist TEXT NOT NULL DEFAULT ''");
+        }
         $hasBlacklist = false;
         foreach ($userCols as $col) {
             if ($col['name'] === 'blacklist') { $hasBlacklist = true; break; }
@@ -250,6 +267,38 @@ class DB
                 $deleteLinks->execute([(int)$legacyDrawnId]);
                 $deleteTag = $pdo->prepare('DELETE FROM tags WHERE id = ?');
                 $deleteTag->execute([(int)$legacyDrawnId]);
+                $refreshCount = $pdo->prepare('UPDATE tags SET count = (SELECT COUNT(*) FROM post_tags WHERE tag_id = ?) WHERE id = ?');
+                $refreshCount->execute([$artworkId, $artworkId]);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+        }
+
+        $missingE621Artwork = (bool)$pdo->query("
+            SELECT EXISTS(
+                SELECT 1 FROM posts p
+                WHERE (p.title LIKE 'e621 #%' OR lower(COALESCE(p.source, '')) LIKE '%e621.net/%')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM post_tags pt
+                      INNER JOIN tags t ON t.id = pt.tag_id
+                      WHERE pt.post_id = p.id AND t.name = 'artwork' COLLATE NOCASE
+                  )
+            )
+        ")->fetchColumn();
+        if ($missingE621Artwork) {
+            $pdo->beginTransaction();
+            try {
+                $pdo->exec("INSERT OR IGNORE INTO tags (name) VALUES ('artwork')");
+                $artworkId = (int)$pdo->query("SELECT id FROM tags WHERE name = 'artwork' COLLATE NOCASE")->fetchColumn();
+                $assignArtwork = $pdo->prepare("
+                    INSERT OR IGNORE INTO post_tags (post_id, tag_id)
+                    SELECT p.id, ? FROM posts p
+                    WHERE p.title LIKE 'e621 #%'
+                       OR lower(COALESCE(p.source, '')) LIKE '%e621.net/%'
+                ");
+                $assignArtwork->execute([$artworkId]);
                 $refreshCount = $pdo->prepare('UPDATE tags SET count = (SELECT COUNT(*) FROM post_tags WHERE tag_id = ?) WHERE id = ?');
                 $refreshCount->execute([$artworkId, $artworkId]);
                 $pdo->commit();

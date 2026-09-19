@@ -1148,25 +1148,37 @@ function page_scraper(?array $user, string $method): void
 
         if ($action === 'start') {
             $tag = trim($_POST['tag'] ?? '');
+            $source = in_array($_POST['source'] ?? '', ['realbooru', 'e621'], true) ? $_POST['source'] : 'realbooru';
+            $blacklist = $source === 'e621' ? trim($_POST['blacklist'] ?? '') : '';
             if ($tag !== '') {
-                $script = __DIR__ . '/scrapers/realbooru.php';
+                $script = __DIR__ . '/scrapers/' . $source . '.php';
 
-                DB::exec('INSERT INTO scraper_tasks (tag, status) VALUES (?, ?)', [$tag, 'starting']);
+                DB::exec('INSERT INTO scraper_tasks (tag, source, blacklist, status) VALUES (?, ?, ?, ?)', [$tag, $source, $blacklist, 'starting']);
                 $taskId = (int)DB::lastId();
                 $logFile = __DIR__ . '/data/scraper_' . $taskId . '.log';
 
-
-                $cmd = sprintf(
-                    'php %s --tag %s --task-id %d > %s 2>&1 & echo $!',
-                    escapeshellarg($script),
-                    escapeshellarg($tag),
-                    $taskId,
-                    escapeshellarg($logFile)
-                );
+                if ($source === 'e621') {
+                    $cmd = sprintf(
+                        'php %s --tag %s --blacklist %s --task-id %d > %s 2>&1 & echo $!',
+                        escapeshellarg($script),
+                        escapeshellarg($tag),
+                        escapeshellarg($blacklist),
+                        $taskId,
+                        escapeshellarg($logFile)
+                    );
+                } else {
+                    $cmd = sprintf(
+                        'php %s --tag %s --task-id %d > %s 2>&1 & echo $!',
+                        escapeshellarg($script),
+                        escapeshellarg($tag),
+                        $taskId,
+                        escapeshellarg($logFile)
+                    );
+                }
                 $pid = (int)shell_exec($cmd);
                 if ($pid > 0) {
                     DB::exec('UPDATE scraper_tasks SET pid = ?, status = ? WHERE id = ?', [$pid, 'running', $taskId]);
-                    View::setFlash("Started scraper for tag: $tag (PID: $pid)", 'ok');
+                    View::setFlash('Started ' . ($source === 'e621' ? 'e621' : 'Realbooru') . " scraper for tag: $tag (PID: $pid)", 'ok');
                 } else {
                     DB::exec('UPDATE scraper_tasks SET status = ? WHERE id = ?', ['error', $taskId]);
                     View::setFlash("Failed to start scraper process.", 'error');
@@ -1215,7 +1227,7 @@ function page_scraper(?array $user, string $method): void
             $cmdline = @file_get_contents('/proc/' . (int)$task['pid'] . '/cmdline');
             $expectedTaskArg = "\0--task-id\0" . (int)$task['id'] . "\0";
             $isRunning = is_string($cmdline)
-                && (str_contains($cmdline, 'realbooru.php') || str_contains($cmdline, 'realbooru_tags_fetcher.php'))
+                && (str_contains($cmdline, 'realbooru.php') || str_contains($cmdline, 'realbooru_tags_fetcher.php') || str_contains($cmdline, 'e621.php'))
                 && str_contains($cmdline, $expectedTaskArg);
             if (!$isRunning) {
                 DB::exec("UPDATE scraper_tasks SET status = 'completed' WHERE id = ?", [$task['id']]);
@@ -1232,15 +1244,25 @@ function page_scraper(?array $user, string $method): void
 
     echo '<div class="form-container">';
     echo '<h2>Start New Scraper</h2>';
-    echo '<form method="post" action="' . View::url('/scraper') . '">';
+    echo '<form method="post" action="' . View::url('/scraper') . '" class="scraper-start-form">';
     echo '  <input type="hidden" name="csrf_token" value="' . View::e(View::csrfToken()) . '">';
     echo '  <input type="hidden" name="action" value="start">';
+    echo '  <div class="form-group">';
+    echo '    <label for="scraper-source">Source</label>';
+    echo '    <select id="scraper-source" name="source"><option value="realbooru">Realbooru</option><option value="e621">e621</option></select>';
+    echo '  </div>';
     echo '  <div class="form-group">';
     echo '    <label>Tag to scrape</label>';
     echo '    <input type="text" name="tag" required placeholder="e.g. femboy">';
     echo '  </div>';
+    echo '  <div class="form-group" id="e621-blacklist" hidden>';
+    echo '    <label>Blacklist tags <small>(space, comma or line separated)</small></label>';
+    echo '    <textarea name="blacklist" rows="4" placeholder="gore scat feral"></textarea>';
+    echo '    <small>e621 posts containing any of these tags will be skipped.</small>';
+    echo '  </div>';
     echo '  <button type="submit" class="button">Start Scraper</button>';
     echo '</form>';
+    echo '<script>(() => { const source = document.getElementById("scraper-source"); const blacklist = document.getElementById("e621-blacklist"); const update = () => { blacklist.hidden = source.value !== "e621"; }; source.addEventListener("change", update); update(); })();</script>';
     echo '</div>';
 
     echo '<div class="form-container">';
@@ -1262,12 +1284,14 @@ function page_scraper(?array $user, string $method): void
         echo '</form>';
 
         echo '<table class="data-table">';
-        echo '<tr><th>ID</th><th>Tag</th><th>PID</th><th>Status</th><th>Started</th><th>Action</th></tr>';
+        echo '<tr><th>ID</th><th>Source</th><th>Tag</th><th>Blacklist</th><th>PID</th><th>Status</th><th>Started</th><th>Action</th></tr>';
         foreach ($tasks as $t) {
             $statusColor = $t['status'] === 'running' ? 'color: orange;' : 'color: green;';
             echo '<tr>';
             echo '<td>' . $t['id'] . '</td>';
+            echo '<td>' . View::e(($t['source'] ?? 'realbooru') === 'e621' ? 'e621' : 'Realbooru') . '</td>';
             echo '<td>' . View::e($t['tag']) . '</td>';
+            echo '<td>' . View::e($t['blacklist'] ?? '') . '</td>';
             echo '<td>' . $t['pid'] . '</td>';
             echo '<td style="font-weight:bold; ' . $statusColor . '">' . View::e($t['status']) . '</td>';
             echo '<td>' . date('Y-m-d H:i:s', $t['created_at']) . '</td>';
