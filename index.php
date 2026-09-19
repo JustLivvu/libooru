@@ -1569,6 +1569,7 @@ function page_admin(?array $user, string $method): void
         $permissionByAction = [
             'delete_user' => 'manage_users',
             'regen_api' => 'manage_users',
+            'reset_password' => 'manage_users',
             'set_role' => 'manage_roles',
             'create_role' => 'manage_roles',
             'update_role' => 'manage_roles',
@@ -1675,6 +1676,19 @@ function page_admin(?array $user, string $method): void
             $key = bin2hex(random_bytes(16));
             DB::exec('UPDATE users SET api_key = ? WHERE id = ?', [$key, $uid]);
             View::setFlash('API key regenerated.', 'ok');
+        } elseif ($action === 'reset_password') {
+            $uid = (int)($_POST['user_id'] ?? 0);
+            $target = $uid > 0 ? DB::row('SELECT id, name FROM users WHERE id = ?', [$uid]) : null;
+            $temporaryPassword = $target ? Auth::resetPassword($uid) : null;
+            if ($target && $temporaryPassword !== null) {
+                $_SESSION['admin_password_reset'] = [
+                    'username' => (string)$target['name'],
+                    'password' => $temporaryPassword,
+                ];
+                View::setFlash('Password reset. Copy the temporary password shown below.', 'ok');
+            } else {
+                View::setFlash('User not found. Password was not changed.', 'error');
+            }
         } elseif (in_array($action, ['webhook_settings', 'test_discord_webhook'], true)) {
             $submittedUrl = trim((string)($_POST['discord_webhook_url'] ?? ''));
             $clearWebhook = isset($_POST['clear_discord_webhook']);
@@ -1844,6 +1858,7 @@ function page_admin(?array $user, string $method): void
             'delete_user' => 'users',
             'set_role' => 'users',
             'regen_api' => 'users',
+            'reset_password' => 'users',
             'create_role' => 'roles',
             'update_role' => 'roles',
             'delete_role' => 'roles',
@@ -1859,6 +1874,10 @@ function page_admin(?array $user, string $method): void
     );
     $roleNames = array_column($roles, 'name', 'slug');
     $users        = DB::rows('SELECT id, name, email, registration_reason, role, api_key, created_at, country_code FROM users ORDER BY id DESC');
+    $passwordResetResult = is_array($_SESSION['admin_password_reset'] ?? null)
+        ? $_SESSION['admin_password_reset']
+        : null;
+    unset($_SESSION['admin_password_reset']);
     $registrationRequests = DB::rows('SELECT id, name, email, registration_reason, created_at FROM registration_requests ORDER BY created_at ASC');
     $postReports = [];
     $pendingPostReportCount = 0;
@@ -2258,6 +2277,15 @@ function page_admin(?array $user, string $method): void
     echo '<details class="admin-section"' . ($openSection === 'users' ? ' open' : '') . '>';
     echo '<summary>Users <span class="admin-section-count">' . count($users) . '</span></summary>';
     echo '<div class="admin-section-content">';
+    if ($passwordResetResult !== null) {
+        echo '<div class="admin-password-reset-result">';
+        echo '<strong>Temporary password for ' . View::e((string)$passwordResetResult['username']) . '</strong>';
+        echo '<p>Copy it now. It will not be shown again after leaving or refreshing this page.</p>';
+        echo '<div><input id="admin-generated-password" type="text" readonly value="' . View::e((string)$passwordResetResult['password']) . '" autocomplete="off" spellcheck="false">';
+        echo '<button type="button" id="admin-copy-password">Copy</button></div>';
+        echo '</div>';
+        echo '<script>(()=>{const input=document.getElementById("admin-generated-password");const button=document.getElementById("admin-copy-password");if(!input||!button)return;button.addEventListener("click",async()=>{let copied=false;try{await navigator.clipboard.writeText(input.value);copied=true;}catch(e){input.select();copied=document.execCommand("copy");}if(copied){button.textContent="Copied";setTimeout(()=>button.textContent="Copy",1600);}});})();</script>';
+    }
     echo '<div style="overflow-x:auto"><table>';
     echo '<thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Reason</th><th>Role</th>';
     if (Auth::can('manage_users', $user)) echo '<th>API Key</th>';
@@ -2292,6 +2320,13 @@ function page_admin(?array $user, string $method): void
         }
 
         if (Auth::can('manage_users', $user)) {
+            echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Reset this user password?\')">';
+            View::csrfField();
+            echo '<input type="hidden" name="action" value="reset_password">';
+            echo '<input type="hidden" name="user_id" value="' . View::e($u['id']) . '">';
+            echo '<button>Reset password</button>';
+            echo '</form> ';
+
             echo '<form method="post" style="display:inline">';
             View::csrfField();
             echo '<input type="hidden" name="action" value="regen_api">';

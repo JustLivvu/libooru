@@ -227,6 +227,28 @@ class Auth
         return DB::row('SELECT * FROM users WHERE api_key = ?', [$key]) ?: null;
     }
 
+    public static function generateTemporaryPassword(int $length = 8): string
+    {
+        $length = max(1, $length);
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+        $lastIndex = strlen($alphabet) - 1;
+        $password = '';
+        for ($i = 0; $i < $length; $i++) {
+            $password .= $alphabet[random_int(0, $lastIndex)];
+        }
+        return $password;
+    }
+
+    public static function resetPassword(int $userId): ?string
+    {
+        if ($userId < 1 || !DB::scalar('SELECT id FROM users WHERE id = ?', [$userId])) {
+            return null;
+        }
+        $password = self::generateTemporaryPassword(8);
+        DB::exec('UPDATE users SET password = ? WHERE id = ?', [password_hash($password, PASSWORD_DEFAULT), $userId]);
+        return $password;
+    }
+
 
     public static function setUser(array $user): void
     {
