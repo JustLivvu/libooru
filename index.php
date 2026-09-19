@@ -1148,9 +1148,30 @@ function page_scraper(?array $user, string $method): void
 
         if ($action === 'start') {
             $tag = trim($_POST['tag'] ?? '');
-            $source = in_array($_POST['source'] ?? '', ['realbooru', 'e621'], true) ? $_POST['source'] : 'realbooru';
+            $source = in_array($_POST['source'] ?? '', ['realbooru', 'e621', 'rule34'], true) ? $_POST['source'] : 'realbooru';
             $blacklist = $source === 'e621' ? trim($_POST['blacklist'] ?? '') : '';
-            if ($tag !== '') {
+            $canStart = $tag !== '';
+            if (!$canStart) View::setFlash('Tag cannot be empty.', 'error');
+
+            if ($source === 'rule34') {
+                $submittedUserId = trim($_POST['rule34_user_id'] ?? '');
+                $submittedApiKey = trim($_POST['rule34_api_key'] ?? '');
+                if ($submittedUserId !== '') {
+                    if (ctype_digit($submittedUserId)) {
+                        View::setSiteSetting('rule34_user_id', $submittedUserId);
+                    } else {
+                        View::setFlash('Rule34.xxx User ID must be a number.', 'error');
+                        $canStart = false;
+                    }
+                }
+                if ($submittedApiKey !== '') View::setSiteSetting('rule34_api_key', $submittedApiKey);
+                if (View::siteSetting('rule34_user_id') === '' || View::siteSetting('rule34_api_key') === '') {
+                    View::setFlash('Rule34.xxx User ID and API key are required.', 'error');
+                    $canStart = false;
+                }
+            }
+
+            if ($canStart) {
                 $script = __DIR__ . '/scrapers/' . $source . '.php';
 
                 DB::exec('INSERT INTO scraper_tasks (tag, source, blacklist, status) VALUES (?, ?, ?, ?)', [$tag, $source, $blacklist, 'starting']);
@@ -1178,13 +1199,16 @@ function page_scraper(?array $user, string $method): void
                 $pid = (int)shell_exec($cmd);
                 if ($pid > 0) {
                     DB::exec('UPDATE scraper_tasks SET pid = ?, status = ? WHERE id = ?', [$pid, 'running', $taskId]);
-                    View::setFlash('Started ' . ($source === 'e621' ? 'e621' : 'Realbooru') . " scraper for tag: $tag (PID: $pid)", 'ok');
+                    $sourceLabel = match ($source) {
+                        'e621' => 'e621',
+                        'rule34' => 'Rule34.xxx',
+                        default => 'Realbooru',
+                    };
+                    View::setFlash("Started $sourceLabel scraper for tag: $tag (PID: $pid)", 'ok');
                 } else {
                     DB::exec('UPDATE scraper_tasks SET status = ? WHERE id = ?', ['error', $taskId]);
                     View::setFlash("Failed to start scraper process.", 'error');
                 }
-            } else {
-                View::setFlash("Tag cannot be empty.", 'error');
             }
         } elseif ($action === 'fetch_tags') {
             $script = __DIR__ . '/scrapers/realbooru_tags_fetcher.php';
@@ -1227,7 +1251,7 @@ function page_scraper(?array $user, string $method): void
             $cmdline = @file_get_contents('/proc/' . (int)$task['pid'] . '/cmdline');
             $expectedTaskArg = "\0--task-id\0" . (int)$task['id'] . "\0";
             $isRunning = is_string($cmdline)
-                && (str_contains($cmdline, 'realbooru.php') || str_contains($cmdline, 'realbooru_tags_fetcher.php') || str_contains($cmdline, 'e621.php'))
+                && (str_contains($cmdline, 'realbooru.php') || str_contains($cmdline, 'realbooru_tags_fetcher.php') || str_contains($cmdline, 'e621.php') || str_contains($cmdline, 'rule34.php'))
                 && str_contains($cmdline, $expectedTaskArg);
             if (!$isRunning) {
                 DB::exec("UPDATE scraper_tasks SET status = 'completed' WHERE id = ?", [$task['id']]);
@@ -1240,6 +1264,9 @@ function page_scraper(?array $user, string $method): void
     View::header('Scraper', $user);
     View::flash();
 
+    $rule34UserId = View::siteSetting('rule34_user_id');
+    $rule34ApiConfigured = View::siteSetting('rule34_api_key') !== '';
+
     echo '<h1>Scraper Management</h1>';
 
     echo '<div class="form-container">';
@@ -1249,7 +1276,7 @@ function page_scraper(?array $user, string $method): void
     echo '  <input type="hidden" name="action" value="start">';
     echo '  <div class="form-group">';
     echo '    <label for="scraper-source">Source</label>';
-    echo '    <select id="scraper-source" name="source"><option value="realbooru">Realbooru</option><option value="e621">e621</option></select>';
+    echo '    <select id="scraper-source" name="source"><option value="realbooru">Realbooru</option><option value="e621">e621</option><option value="rule34">Rule34.xxx</option></select>';
     echo '  </div>';
     echo '  <div class="form-group">';
     echo '    <label>Tag to scrape</label>';
@@ -1260,9 +1287,16 @@ function page_scraper(?array $user, string $method): void
     echo '    <textarea name="blacklist" rows="4" placeholder="gore scat feral"></textarea>';
     echo '    <small>e621 posts containing any of these tags will be skipped.</small>';
     echo '  </div>';
+    echo '  <div class="form-group" id="rule34-credentials" hidden>';
+    echo '    <label>Rule34.xxx User ID</label>';
+    echo '    <input name="rule34_user_id" inputmode="numeric" value="' . View::e($rule34UserId) . '" placeholder="Numeric user ID">';
+    echo '    <label>Rule34.xxx API key</label>';
+    echo '    <input type="password" name="rule34_api_key" value="" autocomplete="new-password" placeholder="' . ($rule34ApiConfigured ? 'Configured — leave blank to keep it' : 'Enter API key') . '">';
+    echo '    <small>Generate credentials in Rule34.xxx account options under API Access Credentials.</small>';
+    echo '  </div>';
     echo '  <button type="submit" class="button">Start Scraper</button>';
     echo '</form>';
-    echo '<script>(() => { const source = document.getElementById("scraper-source"); const blacklist = document.getElementById("e621-blacklist"); const update = () => { blacklist.hidden = source.value !== "e621"; }; source.addEventListener("change", update); update(); })();</script>';
+    echo '<script>(() => { const source = document.getElementById("scraper-source"); const blacklist = document.getElementById("e621-blacklist"); const credentials = document.getElementById("rule34-credentials"); const update = () => { blacklist.hidden = source.value !== "e621"; credentials.hidden = source.value !== "rule34"; }; source.addEventListener("change", update); update(); })();</script>';
     echo '</div>';
 
     echo '<div class="form-container">';
@@ -1289,7 +1323,12 @@ function page_scraper(?array $user, string $method): void
             $statusColor = $t['status'] === 'running' ? 'color: orange;' : 'color: green;';
             echo '<tr>';
             echo '<td>' . $t['id'] . '</td>';
-            echo '<td>' . View::e(($t['source'] ?? 'realbooru') === 'e621' ? 'e621' : 'Realbooru') . '</td>';
+            $taskSource = match ($t['source'] ?? 'realbooru') {
+                'e621' => 'e621',
+                'rule34' => 'Rule34.xxx',
+                default => 'Realbooru',
+            };
+            echo '<td>' . View::e($taskSource) . '</td>';
             echo '<td>' . View::e($t['tag']) . '</td>';
             echo '<td>' . View::e($t['blacklist'] ?? '') . '</td>';
             echo '<td>' . $t['pid'] . '</td>';
