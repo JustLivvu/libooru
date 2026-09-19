@@ -157,7 +157,7 @@ class Api
 
         $user = Auth::current();
         if ($user && !empty($user['blacklist'])) {
-            $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+            $blacklisted = Post::canonicalizeTags(preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY));
             $postTagNames = array_map(fn($t) => strtolower($t['name']), $post['tags']);
             if (array_intersect($blacklisted, $postTagNames)) {
                 throw new RuntimeException('Post not found', 404);
@@ -219,12 +219,13 @@ class Api
         $page   = max(1, (int)($_GET['page'] ?? 1));
         $limit  = min(200, max(1, (int)($_GET['limit'] ?? 50)));
         $q      = trim($_GET['q'] ?? '');
+        if (isset(TAG_ALIASES[strtolower($q)])) $q = TAG_ALIASES[strtolower($q)];
         $offset = ($page - 1) * $limit;
 
         $user = Auth::current();
         $blacklisted = [];
         if ($user && !empty($user['blacklist'])) {
-            $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+            $blacklisted = Post::canonicalizeTags(preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY));
         }
         $notInSql = '';
         $notInParams = [];
@@ -248,7 +249,7 @@ class Api
     {
         $this->requirePostReadAccess();
 
-        $q     = trim($_GET['q'] ?? '');
+        $q     = strtolower((string)preg_replace('/\s+/', '_', trim($_GET['q'] ?? '')));
         $limit = min(10, max(1, (int)($_GET['limit'] ?? 8)));
 
         if ($q === '') {
@@ -259,7 +260,7 @@ class Api
         $user = Auth::current();
         $blacklisted = [];
         if ($user && !empty($user['blacklist'])) {
-            $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+            $blacklisted = Post::canonicalizeTags(preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY));
         }
 
         $notInSql = '';
@@ -277,20 +278,49 @@ class Api
                  LIMIT ?';
         $params1 = array_merge([$q . '%'], $notInParams, [$q . '%', $limit]);
         $tags = DB::rows($sql1, $params1);
+        $byName = [];
+
+        // Aliases participate in autocomplete, but the UI always shows the
+        // canonical tag first. For example: "but", "butt" and "booty" suggest "ass".
+        $aliasTargets = Post::aliasTargetsForQuery($q);
+        if ($aliasTargets) {
+            $aliasPlaceholders = implode(',', array_fill(0, count($aliasTargets), '?'));
+            $aliasSql = 'SELECT name, count FROM tags
+                         WHERE name IN (' . $aliasPlaceholders . ')' . $notInSql . '
+                         ORDER BY count DESC';
+            $aliasRows = DB::rows($aliasSql, array_merge($aliasTargets, $notInParams));
+            foreach ($aliasRows as $tag) {
+                $key = strtolower($tag['name']);
+                if (!isset($byName[$key]) && count($byName) < $limit) {
+                    $byName[$key] = $tag;
+                }
+            }
+        }
+
+        foreach ($tags as $tag) {
+            $key = strtolower($tag['name']);
+            if (!isset($byName[$key]) && count($byName) < $limit) {
+                $byName[$key] = $tag;
+            }
+        }
 
 
-        if (count($tags) < $limit) {
-            $found = array_column($tags, 'name');
+        if (count($byName) < $limit) {
             $sql2 = 'SELECT name, count FROM tags
                      WHERE name LIKE ? AND name NOT LIKE ?' . $notInSql . '
                      ORDER BY count DESC
                      LIMIT ?';
-            $params2 = array_merge(['%' . $q . '%', $q . '%'], $notInParams, [$limit - count($tags)]);
+            $params2 = array_merge(['%' . $q . '%', $q . '%'], $notInParams, [$limit]);
             $extra = DB::rows($sql2, $params2);
-            $tags = array_merge($tags, $extra);
+            foreach ($extra as $tag) {
+                $key = strtolower($tag['name']);
+                if (!isset($byName[$key]) && count($byName) < $limit) {
+                    $byName[$key] = $tag;
+                }
+            }
         }
 
-        echo json_encode($tags);
+        echo json_encode(array_values($byName));
     }
 
 

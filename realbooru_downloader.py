@@ -19,6 +19,32 @@ import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+TAG_ALIASES = {
+    'butt': 'ass', 'booty': 'ass', 'buttocks': 'ass',
+    'breast': 'breasts', 'boob': 'breasts', 'boobs': 'breasts',
+    'tit': 'breasts', 'tits': 'breasts',
+    'cock': 'penis', 'dick': 'penis', 'phallus': 'penis',
+    'testicle': 'balls', 'testicles': 'balls', 'anal_hole': 'anus', 'asshole': 'anus',
+    'brunette': 'brown_hair', 'blond': 'blonde_hair', 'blonde': 'blonde_hair',
+    'blond_hair': 'blonde_hair', 'redhead': 'red_hair', 'gray_hair': 'grey_hair',
+    'male_solo': 'solo_male', 'solo_man': 'solo_male',
+    'thigh-highs': 'thighhighs', 'thigh_highs': 'thighhighs',
+    'strap-on': 'strapon', 'strap_on': 'strapon', 'cum_shot': 'cumshot',
+    'doggy_style': 'doggystyle', 'doggy_position': 'doggystyle',
+    'missionary_position': 'missionary', 'reverse_cowgirl': 'reverse_cowgirl_position',
+    'hand_job': 'handjob', 'blow_job': 'blowjob', 'fellatio': 'blowjob',
+    'foot_job': 'footjob', 'tit_job': 'titfuck', 'paizuri': 'titfuck',
+    'jerking_off': 'masturbation', 'jacking_off': 'masturbation',
+    'analingus': 'rimming', 'rimjob': 'rimming', 'pussy_licking': 'cunnilingus',
+    'oral_sex': 'oral', 'vaginal_sex': 'vaginal', 'semen': 'cum',
+    'cum_on_face': 'facial', 'internal_cumshot': 'cum_inside', 'creampie': 'cum_inside',
+    'panty': 'panties', 'outdoors': 'outside', 'inside': 'indoors',
+    'transwoman': 'trans_female', 'trans_woman': 'trans_female',
+    'transman': 'trans_male', 'trans_man': 'trans_male',
+    'big_breasts': 'large_breasts', 'big_boobs': 'large_breasts',
+    'large_penis': 'big_penis', 'large_ass': 'big_ass', 'small_tits': 'small_breasts',
+}
+
 
 
 
@@ -201,6 +227,11 @@ class Database:
         if 'quality' not in post_data:
             post_data['quality'] = determine_quality(post_data.get('width'), post_data.get('height'))
 
+        cleaned_tags = sorted(set(
+            TAG_ALIASES.get(name, name)
+            for name in (re.sub(r'\s+', '_', t.strip().lower()) for t in tags if t.strip())
+        ))
+
         with self.lock:
             if self.use_native:
                 cur = self.conn.cursor()
@@ -209,10 +240,6 @@ class Database:
                     VALUES (1, :filename, :ext, :mime, :filesize, :width, :height, :md5, :rating, :source, :title, :quality)
                 """, post_data)
                 post_id = cur.lastrowid
-
-                cleaned_tags = sorted(list(set(
-                    re.sub(r'\s+', '_', t.strip().lower()) for t in tags if t.strip()
-                )))
 
                 for tag_name in cleaned_tags:
                     cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
@@ -270,7 +297,7 @@ class Database:
                 }
                 echo $postId;
                 """
-                out = self._exec_php_sql(code, [json.dumps(post_data), json.dumps(tags)])
+                out = self._exec_php_sql(code, [json.dumps(post_data), json.dumps(cleaned_tags)])
                 post_id = int(out) if out.isdigit() else 0
                 if post_id > 0:
                     if 'title' in post_data and post_data['title'].startswith("Realbooru #"):
@@ -278,7 +305,7 @@ class Database:
                         self.existing_post_ids.add(str(pid))
                     if 'md5' in post_data:
                         self.existing_md5s.add(post_data['md5'])
-                    self._notify_discord(post_id, tags)
+                    self._notify_discord(post_id, cleaned_tags)
                 return post_id
 
     def _notify_discord(self, post_id, tags):

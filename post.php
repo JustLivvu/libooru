@@ -14,6 +14,34 @@ require_once __DIR__ . '/discord_webhook.php';
 class Post
 {
 
+    public static function canonicalTagName(string $tag): string
+    {
+        $name = strtolower((string)preg_replace('/\s+/', '_', trim($tag)));
+        return TAG_ALIASES[$name] ?? $name;
+    }
+
+    public static function canonicalizeTags(array $tags): array
+    {
+        return array_values(array_unique(array_filter(array_map(
+            fn($tag) => self::canonicalTagName((string)$tag),
+            $tags
+        ))));
+    }
+
+    public static function aliasTargetsForQuery(string $query): array
+    {
+        $needle = strtolower((string)preg_replace('/\s+/', '_', trim($query)));
+        if ($needle === '') return [];
+
+        $targets = [];
+        foreach (TAG_ALIASES as $alias => $canonical) {
+            if (str_starts_with($alias, $needle)) {
+                $targets[] = $canonical;
+            }
+        }
+        return array_values(array_unique($targets));
+    }
+
 
     public static function getById(int $id): ?array
     {
@@ -37,13 +65,14 @@ class Post
 
     public static function list(int $page, int $perPage, array $tagFilter = [], string $rating = '', string $order = 'id DESC', string $quality = ''): array
     {
+        $tagFilter = self::canonicalizeTags($tagFilter);
         $offset = max(0, $page - 1) * $perPage;
         $validQuality = in_array($quality, ['low', 'medium', 'high', 'ultra'], true) ? $quality : '';
 
         $user = class_exists('Auth') ? Auth::current() : null;
         $blacklist = [];
         if ($user && !empty($user['blacklist'])) {
-            $blacklist = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+            $blacklist = self::canonicalizeTags(preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY));
         }
 
         $blSql = '';
@@ -136,6 +165,7 @@ class Post
         $blacklist = $viewer && !empty($viewer['blacklist'])
             ? preg_split('/[\s,]+/', strtolower(trim($viewer['blacklist'])), -1, PREG_SPLIT_NO_EMPTY)
             : [];
+        $blacklist = self::canonicalizeTags($blacklist);
         if ($blacklist) {
             $placeholders = implode(',', array_fill(0, count($blacklist), '?'));
             $conditions[] = "p.id NOT IN (SELECT pt.post_id FROM post_tags pt INNER JOIN tags t ON t.id = pt.tag_id WHERE t.name IN ($placeholders) COLLATE NOCASE)";
@@ -178,10 +208,7 @@ class Post
         }
 
 
-        $tagNames = array_unique(array_filter(array_map(
-            fn($t) => strtolower(preg_replace('/\s+/', '_', trim($t))),
-            $tagNames
-        )));
+        $tagNames = self::canonicalizeTags($tagNames);
 
         foreach ($tagNames as $name) {
             if ($name === '') continue;
@@ -462,7 +489,7 @@ class Post
         $user = class_exists('Auth') ? Auth::current() : null;
         $blacklist = [];
         if ($user && !empty($user['blacklist'])) {
-            $blacklist = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+            $blacklist = self::canonicalizeTags(preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY));
         }
         $blSql = '';
         $blParams = [];

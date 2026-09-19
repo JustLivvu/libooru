@@ -133,6 +133,7 @@ class View
         } else {
             $brand = $e($siteName);
         }
+        $faviconVersion = (string)(@filemtime(__DIR__ . '/static/favicon.png') ?: 1);
         $styleVersion = (string)(@filemtime(__DIR__ . '/static/style.css') ?: 1);
         $autocompleteVersion = (string)(@filemtime(__DIR__ . '/static/autocomplete.js') ?: 1);
 
@@ -148,8 +149,8 @@ class View
 <meta name="rating" content="adult">
 <meta name="theme-color" content="{$e($themeColor)}">
 <link rel="canonical" href="{$e($canonical)}">
-<link rel="icon" type="image/png" href="{$e(SITE_BASE)}/static/favicon.png?v=1">
-<link rel="apple-touch-icon" href="{$e(SITE_BASE)}/static/favicon.png?v=1">
+<link rel="icon" type="image/png" href="{$e(SITE_BASE)}/static/favicon.png?v={$faviconVersion}">
+<link rel="apple-touch-icon" href="{$e(SITE_BASE)}/static/favicon.png?v={$faviconVersion}">
 <meta property="og:site_name" content="{$e($siteName)}">
 <meta property="og:title" content="{$e($fullTitle)}">
 <meta property="og:description" content="{$e($description)}">
@@ -417,7 +418,7 @@ HTML;
                 $user = Auth::current();
             }
             if ($user && !empty($user['blacklist'])) {
-                $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+                $blacklisted = Post::canonicalizeTags(preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY));
                 $blacklistedMap = array_flip($blacklisted);
                 $tags = array_values(array_filter($tags, fn($t) => !isset($blacklistedMap[strtolower($t['name'])])));
             }

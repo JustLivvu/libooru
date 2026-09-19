@@ -276,6 +276,39 @@ class DB
             }
         }
 
+        $canonicalTagIds = [];
+        $pdo->beginTransaction();
+        try {
+            foreach (TAG_ALIASES as $alias => $canonical) {
+                $aliasQuery = $pdo->prepare('SELECT id FROM tags WHERE name = ? COLLATE NOCASE');
+                $aliasQuery->execute([$alias]);
+                $aliasId = $aliasQuery->fetchColumn();
+                if ($aliasId === false) continue;
+
+                $insertCanonical = $pdo->prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)');
+                $insertCanonical->execute([$canonical]);
+                $canonicalQuery = $pdo->prepare('SELECT id FROM tags WHERE name = ? COLLATE NOCASE');
+                $canonicalQuery->execute([$canonical]);
+                $canonicalId = (int)$canonicalQuery->fetchColumn();
+
+                $merge = $pdo->prepare('INSERT OR IGNORE INTO post_tags (post_id, tag_id) SELECT post_id, ? FROM post_tags WHERE tag_id = ?');
+                $merge->execute([$canonicalId, (int)$aliasId]);
+                $deleteLinks = $pdo->prepare('DELETE FROM post_tags WHERE tag_id = ?');
+                $deleteLinks->execute([(int)$aliasId]);
+                $deleteAlias = $pdo->prepare('DELETE FROM tags WHERE id = ?');
+                $deleteAlias->execute([(int)$aliasId]);
+                $canonicalTagIds[$canonicalId] = true;
+            }
+            $refreshCount = $pdo->prepare('UPDATE tags SET count = (SELECT COUNT(*) FROM post_tags WHERE tag_id = ?) WHERE id = ?');
+            foreach (array_keys($canonicalTagIds) as $canonicalId) {
+                $refreshCount->execute([$canonicalId, $canonicalId]);
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+
         $missingE621Artwork = (bool)$pdo->query("
             SELECT EXISTS(
                 SELECT 1 FROM posts p

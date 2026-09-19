@@ -14,7 +14,7 @@ define('SITE_BASE',    '');
 
 
 define('SITE_URL',     rtrim((string)(getenv('LIBOORU_SITE_URL') ?: ''), '/'));
-define('POSTS_PER_PAGE', 20);
+define('POSTS_PER_PAGE', 48);
 define('THUMB_WIDTH',  450);
 define('THUMB_HEIGHT', 450);
 
@@ -30,6 +30,71 @@ const ALLOWED_TYPES = [
     'video/quicktime' => 'mov',
     'video/x-quicktime' => 'mov',
     'application/quicktime' => 'mov',
+];
+
+// Canonical names for equivalent tags imported from different booru sites.
+const TAG_ALIASES = [
+    'butt' => 'ass',
+    'booty' => 'ass',
+    'buttocks' => 'ass',
+    'breast' => 'breasts',
+    'boob' => 'breasts',
+    'boobs' => 'breasts',
+    'tit' => 'breasts',
+    'tits' => 'breasts',
+    'cock' => 'penis',
+    'dick' => 'penis',
+    'phallus' => 'penis',
+    'testicle' => 'balls',
+    'testicles' => 'balls',
+    'anal_hole' => 'anus',
+    'asshole' => 'anus',
+    'brunette' => 'brown_hair',
+    'blond' => 'blonde_hair',
+    'blonde' => 'blonde_hair',
+    'blond_hair' => 'blonde_hair',
+    'redhead' => 'red_hair',
+    'gray_hair' => 'grey_hair',
+    'male_solo' => 'solo_male',
+    'solo_man' => 'solo_male',
+    'thigh-highs' => 'thighhighs',
+    'thigh_highs' => 'thighhighs',
+    'strap-on' => 'strapon',
+    'strap_on' => 'strapon',
+    'cum_shot' => 'cumshot',
+    'doggy_style' => 'doggystyle',
+    'doggy_position' => 'doggystyle',
+    'missionary_position' => 'missionary',
+    'reverse_cowgirl' => 'reverse_cowgirl_position',
+    'hand_job' => 'handjob',
+    'blow_job' => 'blowjob',
+    'fellatio' => 'blowjob',
+    'foot_job' => 'footjob',
+    'tit_job' => 'titfuck',
+    'paizuri' => 'titfuck',
+    'jerking_off' => 'masturbation',
+    'jacking_off' => 'masturbation',
+    'analingus' => 'rimming',
+    'rimjob' => 'rimming',
+    'pussy_licking' => 'cunnilingus',
+    'oral_sex' => 'oral',
+    'vaginal_sex' => 'vaginal',
+    'semen' => 'cum',
+    'cum_on_face' => 'facial',
+    'internal_cumshot' => 'cum_inside',
+    'creampie' => 'cum_inside',
+    'panty' => 'panties',
+    'outdoors' => 'outside',
+    'inside' => 'indoors',
+    'transwoman' => 'trans_female',
+    'trans_woman' => 'trans_female',
+    'transman' => 'trans_male',
+    'trans_man' => 'trans_male',
+    'big_breasts' => 'large_breasts',
+    'big_boobs' => 'large_breasts',
+    'large_penis' => 'big_penis',
+    'large_ass' => 'big_ass',
+    'small_tits' => 'small_breasts',
 ];
 
 

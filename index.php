@@ -480,7 +480,7 @@ function page_post(?array $user, int $id): void
         return;
     }
     if ($user && !empty($user['blacklist'])) {
-        $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+        $blacklisted = Post::canonicalizeTags(preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY));
         $postTagNames = array_map(fn($t) => strtolower($t['name']), $post['tags']);
         if (array_intersect($blacklisted, $postTagNames)) {
             http_response_code(404);
@@ -804,12 +804,13 @@ function page_tags(?array $user): void
 {
     $page   = max(1, (int)($_GET['page'] ?? 1));
     $q      = trim($_GET['q'] ?? '');
+    if (isset(TAG_ALIASES[strtolower($q)])) $q = TAG_ALIASES[strtolower($q)];
     $limit  = 50;
     $offset = ($page - 1) * $limit;
 
     $blacklisted = [];
     if ($user && !empty($user['blacklist'])) {
-        $blacklisted = preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY);
+        $blacklisted = Post::canonicalizeTags(preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY));
     }
     $notInSql = '';
     $notInParams = [];
