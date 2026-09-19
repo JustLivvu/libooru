@@ -67,6 +67,268 @@ class Post
         return 'low';
     }
 
+    public static function search(int $page, int $perPage, string $query, string $rating = '', string $order = 'id DESC', string $quality = ''): array
+    {
+        $page = max(1, $page);
+        $perPage = max(1, min(200, $perPage));
+        $conditions = [];
+        $params = [];
+        $orTerms = [];
+        $validOrders = ['id DESC', 'id ASC', 'score DESC', 'score ASC', 'created_at DESC'];
+        $sqlOrder = in_array($order, $validOrders, true) ? 'p.' . $order : 'p.id DESC';
+
+        if (in_array($rating, ['s', 'q', 'e'], true)) {
+            $conditions[] = 'p.rating = ?';
+            $params[] = $rating;
+        }
+        if (in_array($quality, ['low', 'medium', 'high', 'ultra'], true)) {
+            $conditions[] = 'p.quality = ?';
+            $params[] = $quality;
+        }
+
+        $tokens = self::tokenizeSearch($query);
+        for ($i = 0, $count = count($tokens); $i < $count; $i++) {
+            $token = $tokens[$i];
+            if ($token === '(') {
+                $depth = 1;
+                $groupTokens = [];
+                while (++$i < $count && $depth > 0) {
+                    if ($tokens[$i] === '(') { $depth++; continue; }
+                    if ($tokens[$i] === ')') { $depth--; if ($depth === 0) break; continue; }
+                    $groupTokens[] = $tokens[$i];
+                }
+                $groupConditions = [];
+                $groupParams = [];
+                foreach ($groupTokens as $groupToken) {
+                    $groupToken = ltrim($groupToken, '~');
+                    if ($groupToken === '' || str_starts_with($groupToken, '-')) continue;
+                    foreach (self::splitTagToken($groupToken) as $groupTag) {
+                        [$condition, $conditionParams] = self::tagSearchCondition($groupTag, false);
+                        if ($condition !== '') {
+                            $groupConditions[] = $condition;
+                            array_push($groupParams, ...$conditionParams);
+                        }
+                    }
+                }
+                if ($groupConditions) {
+                    $conditions[] = '(' . implode(' OR ', $groupConditions) . ')';
+                    array_push($params, ...$groupParams);
+                }
+                continue;
+            }
+            if ($token === ')') continue;
+
+            $negated = str_starts_with($token, '-');
+            $isOr = str_starts_with($token, '~');
+            if ($negated || $isOr) $token = substr($token, 1);
+            if ($token === '') continue;
+
+            if (self::applySearchMetatag($token, $negated, $conditions, $params, $sqlOrder, $perPage)) {
+                continue;
+            }
+
+            foreach (self::splitTagToken($token) as $tag) {
+                [$condition, $conditionParams] = self::tagSearchCondition($tag, $negated);
+                if ($condition === '') continue;
+                if ($isOr && !$negated) {
+                    $orTerms[] = [$condition, $conditionParams];
+                } else {
+                    $conditions[] = $condition;
+                    array_push($params, ...$conditionParams);
+                }
+            }
+        }
+
+        if ($orTerms) {
+            $conditions[] = '(' . implode(' OR ', array_column($orTerms, 0)) . ')';
+            foreach ($orTerms as [, $orParams]) array_push($params, ...$orParams);
+        }
+
+        $user = class_exists('Auth') ? Auth::current() : null;
+        if ($user && !empty($user['blacklist'])) {
+            foreach (self::canonicalizeTags(preg_split('/[\s,]+/', strtolower(trim($user['blacklist'])), -1, PREG_SPLIT_NO_EMPTY)) as $blockedTag) {
+                [$condition, $conditionParams] = self::tagSearchCondition($blockedTag, true);
+                $conditions[] = $condition;
+                array_push($params, ...$conditionParams);
+            }
+        }
+
+        $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
+        $offset = ($page - 1) * $perPage;
+        $posts = DB::rows("SELECT p.* FROM posts p{$where} ORDER BY {$sqlOrder} LIMIT ? OFFSET ?", array_merge($params, [$perPage, $offset]));
+        $total = (int)(DB::scalar("SELECT COUNT(*) FROM posts p{$where}", $params) ?: 0);
+        return ['posts' => $posts, 'total' => $total, 'pages' => (int)ceil($total / $perPage), 'per_page' => $perPage];
+    }
+
+    private static function tokenizeSearch(string $query): array
+    {
+        preg_match_all('/\(|\)|(?:[^\s()"]+|"[^"]*")+/', trim($query), $matches);
+        return array_slice($matches[0] ?? [], 0, 80);
+    }
+
+    private static function splitTagToken(string $token): array
+    {
+        return array_values(array_filter(array_map('trim', explode(',', $token)), static fn(string $tag): bool => $tag !== ''));
+    }
+
+    private static function tagSearchCondition(string $tag, bool $negated): array
+    {
+        $tag = strtolower(trim($tag, " \t\n\r\0\x0B\""));
+        if ($tag === '') return ['', []];
+        $operator = $negated ? 'NOT EXISTS' : 'EXISTS';
+        if (str_contains($tag, '*')) {
+            $pattern = str_replace(['\\', '%', '_', '*'], ['\\\\', '\\%', '\\_', '%'], $tag);
+            return ["{$operator} (SELECT 1 FROM post_tags pts JOIN tags ts ON ts.id = pts.tag_id WHERE pts.post_id = p.id AND ts.name LIKE ? ESCAPE '\\' COLLATE NOCASE)", [$pattern]];
+        }
+        $tag = self::canonicalTagName($tag);
+        return ["{$operator} (SELECT 1 FROM post_tags pts JOIN tags ts ON ts.id = pts.tag_id WHERE pts.post_id = p.id AND ts.name = ? COLLATE NOCASE)", [$tag]];
+    }
+
+    private static function applySearchMetatag(string $token, bool $negated, array &$conditions, array &$params, string &$order, int &$limit): bool
+    {
+        if (!str_contains($token, ':')) return false;
+        [$key, $value] = explode(':', $token, 2);
+        $key = strtolower($key);
+        $value = trim($value, "\"");
+        $recognized = ['rating','quality','id','score','width','height','filesize','mpixels','ratio','tagcount','favcount','comment_count','date','filetype','type','md5','source','description','hassource','hasdescription','user','user_id','fav','favoritedby','commenter','order','limit'];
+        if (!in_array($key, $recognized, true)) return false;
+
+        if ($key === 'order') {
+            if (!$negated) {
+                $orders = [
+                    'id' => 'p.id ASC', 'id_asc' => 'p.id ASC', 'id_desc' => 'p.id DESC',
+                    'created' => 'p.created_at DESC', 'created_asc' => 'p.created_at ASC',
+                    'score' => 'p.score DESC', 'score_asc' => 'p.score ASC',
+                    'filesize' => 'p.filesize DESC', 'filesize_asc' => 'p.filesize ASC',
+                    'mpixels' => '(COALESCE(p.width,0) * COALESCE(p.height,0)) DESC',
+                    'mpixels_asc' => '(COALESCE(p.width,0) * COALESCE(p.height,0)) ASC',
+                    'favcount' => '(SELECT COUNT(*) FROM favorites fo WHERE fo.post_id = p.id) DESC',
+                    'favcount_asc' => '(SELECT COUNT(*) FROM favorites fo WHERE fo.post_id = p.id) ASC',
+                    'comment_count' => '(SELECT COUNT(*) FROM comments co WHERE co.post_id = p.id) DESC',
+                    'comment_count_asc' => '(SELECT COUNT(*) FROM comments co WHERE co.post_id = p.id) ASC',
+                    'tagcount' => '(SELECT COUNT(*) FROM post_tags po WHERE po.post_id = p.id) DESC',
+                    'tagcount_asc' => '(SELECT COUNT(*) FROM post_tags po WHERE po.post_id = p.id) ASC',
+                    'landscape' => '(COALESCE(p.width,0) * 1.0 / MAX(COALESCE(p.height,1),1)) DESC',
+                    'portrait' => '(COALESCE(p.width,0) * 1.0 / MAX(COALESCE(p.height,1),1)) ASC',
+                    'random' => 'RANDOM()',
+                ];
+                if (isset($orders[strtolower($value)])) $order = $orders[strtolower($value)];
+            }
+            return true;
+        }
+        if ($key === 'limit') {
+            if (!$negated && ctype_digit($value)) $limit = max(1, min(200, (int)$value));
+            return true;
+        }
+
+        $condition = '';
+        $conditionParams = [];
+        if ($key === 'rating') {
+            $ratings = ['safe' => 's', 'questionable' => 'q', 'explicit' => 'e', 's' => 's', 'q' => 'q', 'e' => 'e'];
+            if (isset($ratings[strtolower($value)])) { $condition = 'p.rating = ?'; $conditionParams[] = $ratings[strtolower($value)]; }
+        } elseif ($key === 'quality') {
+            if (in_array(strtolower($value), ['low','medium','high','ultra'], true)) { $condition = 'p.quality = ?'; $conditionParams[] = strtolower($value); }
+        } elseif (in_array($key, ['id','score','width','height','filesize','mpixels','ratio','tagcount','favcount','comment_count'], true)) {
+            $expressions = [
+                'id' => 'p.id', 'score' => 'p.score', 'width' => 'COALESCE(p.width,0)', 'height' => 'COALESCE(p.height,0)',
+                'filesize' => 'p.filesize', 'mpixels' => '(COALESCE(p.width,0) * COALESCE(p.height,0) / 1000000.0)',
+                'ratio' => '(COALESCE(p.width,0) * 1.0 / MAX(COALESCE(p.height,1),1))',
+                'tagcount' => '(SELECT COUNT(*) FROM post_tags pc WHERE pc.post_id = p.id)',
+                'favcount' => '(SELECT COUNT(*) FROM favorites fc WHERE fc.post_id = p.id)',
+                'comment_count' => '(SELECT COUNT(*) FROM comments cc WHERE cc.post_id = p.id)',
+            ];
+            [$condition, $conditionParams] = self::numericSearchCondition($expressions[$key], $value, $key === 'filesize');
+        } elseif ($key === 'date') {
+            [$condition, $conditionParams] = self::dateSearchCondition($value);
+        } elseif ($key === 'filetype') {
+            $ext = strtolower(ltrim($value, '.'));
+            if ($ext === 'jpeg') $ext = 'jpg';
+            if (in_array($ext, ['jpg','png','gif','webp','mp4','webm','mov'], true)) { $condition = 'LOWER(p.ext) = ?'; $conditionParams[] = $ext; }
+        } elseif ($key === 'type') {
+            $type = strtolower($value);
+            if ($type === 'image') $condition = "p.mime LIKE 'image/%'";
+            elseif ($type === 'video') $condition = "p.mime LIKE 'video/%'";
+            elseif ($type === 'animation') $condition = "LOWER(p.ext) IN ('gif','webp')";
+        } elseif ($key === 'md5') {
+            if (preg_match('/^[a-f0-9]{32}$/i', $value)) { $condition = 'p.md5 = ? COLLATE NOCASE'; $conditionParams[] = strtolower($value); }
+        } elseif ($key === 'source') {
+            if (strtolower($value) === 'none') $condition = "COALESCE(p.source,'') = ''";
+            elseif (strtolower($value) === 'any') $condition = "COALESCE(p.source,'') <> ''";
+            else { $condition = 'COALESCE(p.source,\'\') LIKE ? COLLATE NOCASE'; $conditionParams[] = str_replace('*', '%', $value); }
+        } elseif ($key === 'description') {
+            $condition = 'COALESCE(p.title,\'\') LIKE ? COLLATE NOCASE';
+            $conditionParams[] = '%' . str_replace('*', '%', $value) . '%';
+        } elseif ($key === 'hassource' || $key === 'hasdescription') {
+            $truthy = in_array(strtolower($value), ['true','yes','1'], true);
+            $column = $key === 'hassource' ? 'p.source' : 'p.title';
+            $condition = "COALESCE({$column},'') " . ($truthy ? '<>' : '=') . " ''";
+        } elseif ($key === 'user_id' && ctype_digit($value)) {
+            $condition = 'p.user_id = ?'; $conditionParams[] = (int)$value;
+        } elseif ($key === 'user') {
+            $condition = 'EXISTS (SELECT 1 FROM users su WHERE su.id = p.user_id AND su.name = ? COLLATE NOCASE)'; $conditionParams[] = $value;
+        } elseif ($key === 'fav' || $key === 'favoritedby') {
+            $name = strtolower($value) === 'me' && class_exists('Auth') && Auth::current() ? Auth::current()['name'] : $value;
+            $condition = 'EXISTS (SELECT 1 FROM favorites sf JOIN users fu ON fu.id = sf.user_id WHERE sf.post_id = p.id AND fu.name = ? COLLATE NOCASE)'; $conditionParams[] = $name;
+        } elseif ($key === 'commenter') {
+            if (strtolower($value) === 'any') $condition = 'EXISTS (SELECT 1 FROM comments sc WHERE sc.post_id = p.id)';
+            elseif (strtolower($value) === 'none') $condition = 'NOT EXISTS (SELECT 1 FROM comments sc WHERE sc.post_id = p.id)';
+            else { $condition = 'EXISTS (SELECT 1 FROM comments sc JOIN users cu ON cu.id = sc.user_id WHERE sc.post_id = p.id AND cu.name = ? COLLATE NOCASE)'; $conditionParams[] = $value; }
+        }
+
+        if ($condition !== '') {
+            $conditions[] = $negated ? 'NOT (' . $condition . ')' : $condition;
+            array_push($params, ...$conditionParams);
+        }
+        return true;
+    }
+
+    private static function numericSearchCondition(string $expression, string $value, bool $fileSize = false): array
+    {
+        $convert = static function (string $number) use ($fileSize): ?float {
+            if (!preg_match('/^(-?\d+(?:\.\d+)?)(kb|mb|gb)?$/i', trim($number), $match)) return null;
+            $result = (float)$match[1];
+            if ($fileSize) $result *= match (strtolower($match[2] ?? '')) { 'kb' => 1024, 'mb' => 1048576, 'gb' => 1073741824, default => 1 };
+            return $result;
+        };
+        if (str_contains($value, ',')) {
+            $numbers = array_values(array_filter(array_map($convert, explode(',', $value)), static fn(?float $number): bool => $number !== null));
+            if (!$numbers) return ['', []];
+            return ["{$expression} IN (" . implode(',', array_fill(0, count($numbers), 'CAST(? AS REAL)')) . ')', $numbers];
+        }
+        if (str_contains($value, '..')) {
+            [$min, $max] = explode('..', $value, 2);
+            $parts = []; $params = [];
+            if ($min !== '' && ($number = $convert($min)) !== null) { $parts[] = "{$expression} >= CAST(? AS REAL)"; $params[] = $number; }
+            if ($max !== '' && ($number = $convert($max)) !== null) { $parts[] = "{$expression} <= CAST(? AS REAL)"; $params[] = $number; }
+            return [$parts ? '(' . implode(' AND ', $parts) . ')' : '', $params];
+        }
+        if (preg_match('/^(>=|<=|>|<|=)?(.+)$/', $value, $match) && ($number = $convert($match[2])) !== null) {
+            return ["{$expression} " . ($match[1] ?: '=') . ' CAST(? AS REAL)', [$number]];
+        }
+        return ['', []];
+    }
+
+    private static function dateSearchCondition(string $value): array
+    {
+        $dayRange = static function (string $date): ?array {
+            $date = strtolower($date);
+            if ($date === 'today') $start = strtotime('today');
+            elseif ($date === 'yesterday') $start = strtotime('yesterday');
+            elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) $start = strtotime($date . ' 00:00:00');
+            else return null;
+            return [$start, $start + 86400 - 1];
+        };
+        if (str_contains($value, '..')) {
+            [$from, $to] = explode('..', $value, 2);
+            $parts = []; $params = [];
+            if ($from !== '' && ($range = $dayRange($from))) { $parts[] = 'p.created_at >= ?'; $params[] = $range[0]; }
+            if ($to !== '' && ($range = $dayRange($to))) { $parts[] = 'p.created_at <= ?'; $params[] = $range[1]; }
+            return [$parts ? '(' . implode(' AND ', $parts) . ')' : '', $params];
+        }
+        $range = $dayRange($value);
+        return $range ? ['p.created_at BETWEEN ? AND ?', $range] : ['', []];
+    }
+
     public static function list(int $page, int $perPage, array $tagFilter = [], string $rating = '', string $order = 'id DESC', string $quality = ''): array
     {
         $tagFilter = self::canonicalizeTags($tagFilter);

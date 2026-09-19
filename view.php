@@ -100,7 +100,7 @@ class View
             ? (substr($requestPath, strlen(SITE_BASE)) ?: '/')
             : $requestPath;
         $isPublicPage = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && http_response_code() < 400
-            && (bool)preg_match('#^/(?:$|posts$|tags$|terms$|post/\d+$)#', $relativePath);
+            && (bool)preg_match('#^/(?:$|posts$|tags$|terms$|search-help$|post/\d+$)#', $relativePath);
         $robots = (string)($meta['robots'] ?? ($isPublicPage ? 'index,follow,max-image-preview:large' : 'noindex,follow'));
         $image = array_key_exists('image', $meta)
             ? (string)$meta['image']
@@ -411,7 +411,7 @@ HTML;
         ];
 
         echo '<div id="sidebar">';
-        echo '<h5>Search</h5>';
+        echo '<div class="sidebar-search-heading"><h5>Search</h5><a href="' . self::url('/search-help') . '">[ search help ]</a></div>';
         echo '<form method="get" action="' . self::url('/posts') . '">';
         echo '<div class="form-group"><input type="text" name="q" placeholder="Tags..." value="' . self::e($_GET['q'] ?? '') . '" style="width:100%"></div>';
         echo '<div class="form-group"><select name="quality" style="width:100%">';

@@ -254,6 +254,32 @@ main.full-width {
   font-weight: 600;
 }
 
+#sidebar .sidebar-search-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+#sidebar .sidebar-search-heading h5 {
+  margin: 0;
+}
+
+#sidebar .sidebar-search-heading a {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: lowercase;
+}
+
+#sidebar .sidebar-search-heading a:hover,
+#sidebar .sidebar-search-heading a:focus-visible {
+  color: var(--text-main);
+  text-decoration: underline;
+}
+
 #sidebar .form-group {
   margin-bottom: 12px;
 }
@@ -409,6 +435,102 @@ main.full-width {
   color: var(--text-dim);
   font-size: 11px;
   flex-shrink: 0;
+}
+
+.search-help-page {
+  max-width: 860px;
+}
+
+.search-help-intro {
+  margin: -8px 0 28px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.search-help-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  margin: -10px 0 30px;
+  font-size: 12px;
+}
+
+.search-help-toc a::before {
+  content: "# ";
+  color: var(--text-dim);
+}
+
+.search-help-page section {
+  margin-bottom: 32px;
+}
+
+.search-help-page h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.search-help-table {
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.search-help-table > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) 1fr;
+  gap: 18px;
+  align-items: baseline;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.search-help-table > div > a:first-child {
+  align-self: start;
+  overflow-wrap: anywhere;
+}
+
+.search-help-table > div:last-child {
+  border-bottom: 0;
+}
+
+.search-help-table code,
+.search-help-examples code {
+  color: var(--tag-general);
+}
+
+.search-help-table span,
+.search-help-page li {
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.search-help-examples {
+  display: grid;
+  gap: 7px;
+}
+
+.search-help-note {
+  margin: 8px 0 28px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--text-dim);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.search-help-page .button {
+  display: inline-block;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+}
+
+@media (max-width: 600px) {
+  .search-help-table > div {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
 }
 
 

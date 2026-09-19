@@ -301,6 +301,10 @@ function dispatch(string $method, string $path): void
         page_terms($user);
     }
 
+    elseif ($path === '/search-help') {
+        page_search_help($user);
+    }
+
     elseif (preg_match('#^/user/([^/]+)/favorites$#', $path, $m)) {
         page_user_favorites($user, rawurldecode($m[1]));
     }
@@ -424,8 +428,7 @@ function page_posts(?array $user): void
     $order   = in_array($_GET['order'] ?? '', ['id DESC', 'id ASC', 'score DESC', 'created_at DESC'], true)
                ? $_GET['order'] : 'id DESC';
 
-    $tags   = $q ? preg_split('/[\s,]+/', $q, -1, PREG_SPLIT_NO_EMPTY) : [];
-    $result = Post::list($page, POSTS_PER_PAGE, $tags, $rating, $order, $quality);
+    $result = Post::search($page, POSTS_PER_PAGE, $q, $rating, $order, $quality);
     Activity::recordPostBrowsing();
 
     $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 50');
@@ -961,6 +964,100 @@ function page_terms(?array $user): void
     View::header('Terms of Service', $user);
     echo '<h1>Terms of Service</h1>';
     echo '<div style="max-width:800px; white-space:pre-wrap; line-height:1.6;">' . View::e($terms) . '</div>';
+    View::footer();
+}
+
+function page_search_help(?array $user): void
+{
+    View::header('Search Help', $user, null, [
+        'description' => 'Learn how to search Librebooru using tags, aliases, ratings, quality filters, and sorting.',
+        'canonical' => View::url('/search-help'),
+        'image' => false,
+    ]);
+
+    $example = static function (string $label, array $params): string {
+        return '<a href="' . View::url('/posts', $params) . '"><code>' . View::e($label) . '</code></a>';
+    };
+
+    $row = static function (string $query, string $description) use ($example): string {
+        return '<div>' . $example($query, ['q' => $query]) . '<span>' . $description . '</span></div>';
+    };
+
+    echo '<article class="search-help-page">';
+    echo '<h1>Search Cheatsheet</h1>';
+    echo '<p class="search-help-intro">Librebooru supports e621-style tag operators and metatags for metadata stored by this site. Click any example to run it.</p>';
+
+    echo '<nav class="search-help-toc"><a href="#basics">Basics</a><a href="#sorting">Sorting</a><a href="#rating">Rating & files</a><a href="#size">Size & counts</a><a href="#text">Text & users</a><a href="#dates">Dates</a><a href="#ranges">Ranges</a></nav>';
+
+    echo '<section id="basics"><h2>Basics</h2><div class="search-help-table">';
+    echo $row('1girl long_hair', 'Posts tagged with both <code>1girl</code> and <code>long_hair</code>. Separate tags with spaces.');
+    echo $row('~brown_hair ~black_hair', 'Posts containing either tag, or both. Prefix OR terms with <code>~</code>.');
+    echo $row('female -long_hair', 'Posts tagged <code>female</code> that do not have <code>long_hair</code>.');
+    echo $row('blonde_*', 'Wildcard search: match any tag beginning with <code>blonde_</code>. <code>*hair</code> and <code>*hair*</code> also work.');
+    echo $row('( ~brown_hair ~black_hair ) ( ~1girl ~1boy )', 'Require one hair-color tag and one character-count tag. Keep spaces around parentheses.');
+    echo $row('boobs', 'Aliases resolve automatically; this example searches for the canonical tag <code>breasts</code>.');
+    echo '</div></section>';
+
+    echo '<section id="sorting"><h2>Sorting and result limit</h2><div class="search-help-table">';
+    echo $row('order:id', 'Oldest posts first. Use <code>order:id_desc</code> for newest first.');
+    echo $row('order:score', 'Highest score first. Use <code>order:score_asc</code> for lowest first.');
+    echo $row('order:favcount', 'Most favorited first. The <code>_asc</code> suffix reverses the order.');
+    echo $row('order:comment_count', 'Most commented first.');
+    echo $row('order:mpixels', 'Largest resolution first.');
+    echo $row('order:filesize', 'Largest files first.');
+    echo $row('order:landscape', 'Widest aspect ratios first. Use <code>order:portrait</code> for tallest first.');
+    echo $row('order:random limit:12', 'Random order with 12 results per page. Limits from 1 to 200 are accepted.');
+    echo '</div></section>';
+
+    echo '<section id="rating"><h2>Rating, quality, and file types</h2><div class="search-help-table">';
+    echo $row('rating:s', 'Safe posts. Also accepts <code>rating:q</code>, <code>rating:e</code>, and the full rating names.');
+    echo $row('quality:ultra', '4K-quality posts. Other values: <code>low</code>, <code>medium</code>, and <code>high</code>.');
+    echo $row('filetype:png', 'Posts with the selected extension: jpg, png, gif, webp, mp4, webm, or mov.');
+    echo $row('type:video', 'Video files. Other values: <code>image</code> and <code>animation</code>.');
+    echo '</div></section>';
+
+    echo '<section id="size"><h2>IDs, dimensions, and counts</h2><div class="search-help-table">';
+    echo $row('id:10000..20000', 'Posts with an ID in the specified range. Comma-separated exact IDs are also supported.');
+    echo $row('score:>=10', 'Posts with a score of at least 10.');
+    echo $row('width:1920..', 'Images or videos at least 1920 pixels wide. <code>height:</code> works the same way.');
+    echo $row('mpixels:2..8', 'Posts between 2 and 8 megapixels.');
+    echo $row('ratio:>=1.5', 'Posts whose width-to-height ratio is at least 1.5.');
+    echo $row('filesize:1mb..10mb', 'Files between 1 MB and 10 MB. Units B, KB, MB, and GB are supported.');
+    echo $row('tagcount:>=20', 'Posts with at least 20 tags.');
+    echo $row('favcount:>=5', 'Posts favorited at least five times.');
+    echo $row('comment_count:>=1', 'Posts with at least one comment.');
+    echo '</div></section>';
+
+    echo '<section id="text"><h2>Text, hashes, and users</h2><div class="search-help-table">';
+    echo $row('source:*e621.net*', 'Posts whose source URL contains <code>e621.net</code>.');
+    echo $row('source:none', 'Posts without a source URL. Use <code>source:any</code> for posts with a source.');
+    echo $row('hassource:true', 'Posts with a source. Boolean values may also be negated with a leading <code>-</code>.');
+    echo $row('hasdescription:true', 'Posts with a stored title or description.');
+    echo $row('description:Realbooru', 'Posts whose stored title contains the supplied text.');
+    echo $row('md5:d41d8cd98f00b204e9800998ecf8427e', 'Find the post with one exact MD5 hash.');
+    echo $row('user:admin', 'Posts uploaded by a username. <code>user_id:1</code> searches by numeric user ID.');
+    echo $row('fav:me', 'Posts favorited by the signed-in user. A username can be used instead of <code>me</code>.');
+    echo $row('commenter:any', 'Posts with comments. Use a username or <code>commenter:none</code>.');
+    echo '</div></section>';
+
+    echo '<section id="dates"><h2>Upload dates</h2><div class="search-help-table">';
+    echo $row('date:today', 'Posts uploaded today. <code>date:yesterday</code> is also supported.');
+    echo $row('date:2026-01-01', 'Posts uploaded on one exact calendar date.');
+    echo $row('date:2026-01-01..2026-01-31', 'Posts uploaded within an inclusive date range. Open-ended ranges also work.');
+    echo '</div></section>';
+
+    echo '<section id="ranges"><h2>Range syntax</h2><div class="search-help-table">';
+    echo $row('score:25', 'Exactly 25.');
+    echo $row('score:25..50', 'Between 25 and 50, inclusive.');
+    echo $row('score:25..', '25 or greater.');
+    echo $row('score:..50', '50 or less.');
+    echo $row('score:>25', 'Greater than 25. Operators <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, and <code>&lt;=</code> are supported.');
+    echo $row('-score:>25', 'Negate any metatag by adding <code>-</code> before it.');
+    echo '</div></section>';
+
+    echo '<aside class="search-help-note"><strong>Not applicable to Librebooru:</strong> e621 operators for pools, sets, parent/child relationships, notes, approval status, replacements, and field locks are omitted because Librebooru does not store those objects.</aside>';
+    echo '<p><a class="button" href="' . View::url('/posts') . '">Back to search</a></p>';
+    echo '</article>';
     View::footer();
 }
 
