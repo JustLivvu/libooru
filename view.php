@@ -136,6 +136,7 @@ class View
         $faviconVersion = (string)(@filemtime(__DIR__ . '/static/favicon.png') ?: 1);
         $styleVersion = (string)(@filemtime(__DIR__ . '/static/style.css') ?: 1);
         $autocompleteVersion = (string)(@filemtime(__DIR__ . '/static/autocomplete.js') ?: 1);
+        $tagExplanationsVersion = (string)(@filemtime(__DIR__ . '/static/tag-explanations.js') ?: 1);
         $mediaPreconnect = '';
         if (self::siteSetting('storage_driver', 'local') === 's3') {
             $endpoint = self::siteSetting('s3_endpoint');
@@ -174,6 +175,7 @@ class View
 <script type="application/ld+json">{$jsonLdJson}</script>
 {$mediaPreconnect}<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v={$styleVersion}">
 <script src="{$e(SITE_BASE)}/static/autocomplete.js?v={$autocompleteVersion}" defer></script>
+<script src="{$e(SITE_BASE)}/static/tag-explanations.js?v={$tagExplanationsVersion}" defer></script>
 </head>
 <body>
 HTML;
@@ -441,8 +443,9 @@ HTML;
                 echo '<h5>Tags</h5>';
                 echo '<ul class="tag-list">';
                 foreach ($tags as $t) {
-                    echo '<li><a href="' . self::url('/posts', ['q' => $t['name']]) . '">' . self::e($t['name']) . '</a>';
-                    if (isset($t['count'])) echo ' <span>(' . $t['count'] . ')</span>';
+                    echo '<li><span class="tag-link-wrap"><button type="button" class="tag-help" data-tag="' . self::e($t['name']) . '" aria-label="Explain tag ' . self::e($t['name']) . '" title="Explain this tag">?</button>';
+                    echo '<a href="' . self::url('/posts', ['q' => $t['name']]) . '">' . self::e($t['name']) . '</a></span>';
+                    if (isset($t['count'])) echo ' <span class="tag-count">(' . $t['count'] . ')</span>';
                     echo '</li>';
                 }
                 echo '</ul>';

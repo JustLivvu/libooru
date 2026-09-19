@@ -302,7 +302,7 @@ main.full-width {
 }
 
 #sidebar .tag-list li {
-  margin-bottom: 6px;
+  margin-bottom: 2px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -321,7 +321,91 @@ main.full-width {
   text-decoration: underline;
 }
 
-#sidebar .tag-list span {
+#sidebar .tag-link-wrap {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+#sidebar .tag-help {
+  width: 21px;
+  height: 21px;
+  min-width: 21px;
+  margin: 0 7px 0 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+#sidebar .tag-help:hover,
+#sidebar .tag-help:focus-visible {
+  color: var(--text-main);
+  background: transparent;
+}
+
+.tag-explanation-dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-card);
+  color: var(--text-main);
+  box-shadow: var(--shadow-lg);
+}
+
+.tag-explanation-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(2px);
+}
+
+.tag-explanation-content {
+  padding: 22px;
+}
+
+.tag-explanation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.tag-explanation-header h3 {
+  margin: 0;
+  color: var(--tag-general);
+  overflow-wrap: anywhere;
+}
+
+.tag-explanation-close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex: 0 0 auto;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tag-explanation-text {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.tag-explanation-source {
+  margin: 14px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+#sidebar .tag-list .tag-count {
   color: var(--text-dim);
   font-size: 11px;
   flex-shrink: 0;

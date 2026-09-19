@@ -78,6 +78,13 @@ class DB
             );
             CREATE INDEX IF NOT EXISTS idx_tag_aliases_canonical ON tag_aliases(canonical);
 
+            CREATE TABLE IF NOT EXISTS tag_explanations (
+                tag         TEXT PRIMARY KEY COLLATE NOCASE,
+                description TEXT NOT NULL,
+                source      TEXT NOT NULL DEFAULT 'generated',
+                updated_at  INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+
             CREATE TABLE IF NOT EXISTS post_tags (
                 post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
                 tag_id  INTEGER NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,

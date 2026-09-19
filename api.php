@@ -100,6 +100,10 @@ class Api
             $this->tagsAutocomplete();
         }
 
+        elseif ($method === 'GET' && preg_match('#^/tags/explanation$#', $path)) {
+            $this->tagExplanation();
+        }
+
         elseif ($method === 'GET' && preg_match('#^/tags$#', $path)) {
             $this->getTags();
         }
@@ -326,6 +330,25 @@ class Api
         }
 
         echo json_encode(array_values($byName));
+    }
+
+    private function tagExplanation(): void
+    {
+        $this->requirePostReadAccess();
+        $requestedTag = trim((string)($_GET['tag'] ?? ''));
+        if ($requestedTag === '') throw new RuntimeException('Tag is required', 400);
+
+        $tag = Post::canonicalTagName($requestedTag);
+        /** @var array<string,string> $explanations */
+        $explanations = require __DIR__ . '/tag_explanations.php';
+        $description = $explanations[$tag] ?? null;
+        $source = $description !== null ? 'local' : 'generated';
+        if ($description === null) {
+            $readable = str_replace(['_', '-'], ' ', $tag);
+            $description = 'Posts tagged “' . $readable . '”. A detailed local explanation has not been added for this tag yet.';
+        }
+
+        echo json_encode(['tag' => $tag, 'description' => $description, 'source' => $source]);
     }
 
 
