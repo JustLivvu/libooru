@@ -77,7 +77,7 @@ class Storage
 
 
             $thumbExt = pathinfo($filename, PATHINFO_EXTENSION);
-            if (in_array(strtolower($thumbExt), ['mp4', 'webm'], true)) {
+            if (in_array(strtolower($thumbExt), ['mp4', 'webm', 'mov'], true)) {
                 $thumbFilename = pathinfo($filename, PATHINFO_FILENAME) . '.jpg';
             } else {
                 $thumbFilename = $filename;
@@ -101,7 +101,7 @@ class Storage
         chmod($destUpload, 0644);
 
         $thumbExt = pathinfo($filename, PATHINFO_EXTENSION);
-        if (in_array(strtolower($thumbExt), ['mp4', 'webm'], true)) {
+        if (in_array(strtolower($thumbExt), ['mp4', 'webm', 'mov'], true)) {
             $thumbFilename = pathinfo($filename, PATHINFO_FILENAME) . '.jpg';
         } else {
             $thumbFilename = $filename;
@@ -127,7 +127,7 @@ class Storage
         $driver = self::getDriver();
 
         $thumbExt = pathinfo($filename, PATHINFO_EXTENSION);
-        if (in_array(strtolower($thumbExt), ['mp4', 'webm'], true)) {
+        if (in_array(strtolower($thumbExt), ['mp4', 'webm', 'mov'], true)) {
             $thumbFilename = pathinfo($filename, PATHINFO_FILENAME) . '.jpg';
         } else {
             $thumbFilename = $filename;
@@ -161,7 +161,7 @@ class Storage
     public static function getThumbUrl(string $filename): string
     {
         $ext = pathinfo($filename, PATHINFO_EXTENSION);
-        if (in_array(strtolower($ext), ['mp4', 'webm'], true)) {
+        if (in_array(strtolower($ext), ['mp4', 'webm', 'mov'], true)) {
             $filename = pathinfo($filename, PATHINFO_FILENAME) . '.jpg';
         }
 
@@ -196,7 +196,7 @@ class Storage
         $driver = self::getDriver();
         $filename = basename($filename);
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        $isVideo = $type === 'upload' && in_array($ext, ['mp4', 'webm'], true);
+        $isVideo = $type === 'upload' && in_array($ext, ['mp4', 'webm', 'mov'], true);
 
         if ($driver === 's3') {
             $s3 = self::getS3Client();
@@ -218,7 +218,8 @@ class Storage
 
                 $mimeTypes = [
                     'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
-                    'gif' => 'image/gif', 'webp' => 'image/webp', 'mp4' => 'video/mp4', 'webm' => 'video/webm'
+                    'gif' => 'image/gif', 'webp' => 'image/webp', 'mp4' => 'video/mp4', 'webm' => 'video/webm',
+                    'mov' => 'video/quicktime'
                 ];
                 $mime = $mimeTypes[$ext] ?? 'application/octet-stream';
 

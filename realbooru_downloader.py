@@ -357,7 +357,7 @@ def process_image(src_path, dst_thumb_path, max_w=150, max_h=150):
     Supports images (JPG, PNG, GIF, WebP) via PHP GD and videos (MP4, WebM) via ffmpeg/ffprobe.
     """
     ext = os.path.splitext(src_path)[1].lstrip('.').lower()
-    if ext in ['mp4', 'webm']:
+    if ext in ['mp4', 'webm', 'mov']:
         w, h = 0, 0
         try:
             res = subprocess.run(
@@ -606,7 +606,7 @@ class RealbooruDownloader:
                 return ('skipped', post_id, md5_hash)
 
             ext = img_url.split('.')[-1].split('?')[0].lower()
-            if ext not in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm']:
+            if ext not in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov']:
                 ext = 'jpg'
             if ext == 'jpeg':
                 ext = 'jpg'
@@ -621,6 +621,7 @@ class RealbooruDownloader:
                     'webp': 'image/webp',
                     'mp4': 'video/mp4',
                     'webm': 'video/webm',
+                    'mov': 'video/quicktime',
                 }
                 mime = mime_map.get(ext, f"image/{ext}")
 
@@ -651,7 +652,7 @@ class RealbooruDownloader:
             else:
                 upload_path = os.path.join(self.uploads_dir, filename)
 
-                if ext in ['mp4', 'webm']:
+                if ext in ['mp4', 'webm', 'mov']:
                     thumb_filename = f"{md5_hash}.jpg"
                 else:
                     thumb_filename = filename

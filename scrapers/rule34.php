@@ -78,7 +78,7 @@ if ($afterId > 0) rule34Log("Continuing after Rule34.xxx post #$afterId.");
 $downloaded = 0;
 $skipped = 0;
 $errors = 0;
-$allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm'];
+$allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov'];
 
 while (true) {
     $searchTags = trim($tag . ' sort:id:asc id:>' . $afterId);

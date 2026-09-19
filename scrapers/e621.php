@@ -97,7 +97,7 @@ $downloaded = 0;
 $skipped = 0;
 $blacklisted = 0;
 $errors = 0;
-$allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm'];
+$allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov'];
 
 while (true) {
     $query = http_build_query([

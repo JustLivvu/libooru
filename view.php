@@ -342,7 +342,7 @@ HTML;
             $ext       = strtolower(pathinfo($p['filename'], PATHINFO_EXTENSION));
 
             $typeClass = '';
-            if (str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'webm'], true)) {
+            if (str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'webm', 'mov'], true)) {
                 $typeClass = ' is-video';
             } elseif ($mime === 'image/gif' || $ext === 'gif') {
                 $typeClass = ' is-gif';

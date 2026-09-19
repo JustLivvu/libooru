@@ -87,7 +87,7 @@ function page_sitemap_posts(int $chunk): void
     foreach ($posts as $post) {
         $postUrl = View::absoluteUrl(View::url('/post/' . (int)$post['id']));
         $ext = strtolower(pathinfo((string)$post['filename'], PATHINFO_EXTENSION));
-        $isVideo = str_starts_with((string)($post['mime'] ?? ''), 'video/') || in_array($ext, ['mp4', 'webm'], true);
+        $isVideo = str_starts_with((string)($post['mime'] ?? ''), 'video/') || in_array($ext, ['mp4', 'webm', 'mov'], true);
         $imageUrl = $isVideo
             ? Image::thumbUrl((string)$post['filename'])
             : Image::fileUrl((string)$post['filename']);

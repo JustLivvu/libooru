@@ -540,7 +540,7 @@ function page_post(?array $user, int $id): void
 
     echo '<div class="post-image">';
     $ext = pathinfo($post['filename'], PATHINFO_EXTENSION);
-    if (in_array(strtolower($ext), ['mp4', 'webm'], true)) {
+    if (in_array(strtolower($ext), ['mp4', 'webm', 'mov'], true)) {
         echo '<video src="' . View::e($fileUrl) . '" controls loop playsinline preload="metadata"></video>';
     } else {
         echo '<a href="' . View::e($fileUrl) . '">';
@@ -781,8 +781,8 @@ function page_upload(?array $user, string $method): void
     echo '<form method="post" enctype="multipart/form-data" class="upload-form">';
     View::csrfField();
     $maxMb = MAX_FILE_SIZE / 1024 / 1024;
-    echo '<label><span>Image/Video <small>(JPEG, PNG, GIF, WebP, MP4, WebM — max ' . $maxMb . ' MB)</small></span>';
-    echo '<input type="file" name="file" accept="image/*,video/mp4,video/webm" required></label>';
+    echo '<label><span>Image/Video <small>(JPEG, PNG, GIF, WebP, MP4, WebM, MOV — max ' . $maxMb . ' MB)</small></span>';
+    echo '<input type="file" name="file" accept="image/*,video/mp4,video/webm,video/quicktime,.mov" required></label>';
     echo '<fieldset class="upload-content-type"><legend>Content type</legend><div>';
     echo '<label><input type="radio" name="content_type" value="artwork" checked><span>Artwork</span></label>';
     echo '<label><input type="radio" name="content_type" value="real_life"><span>Real Life</span></label>';
@@ -1095,7 +1095,7 @@ function page_favorites_lucky(?array $user): void
     $backUrl = View::url('/favorites');
 
     $ext = pathinfo($post['filename'], PATHINFO_EXTENSION);
-    $isVideo = in_array(strtolower($ext), ['mp4', 'webm'], true);
+    $isVideo = in_array(strtolower($ext), ['mp4', 'webm', 'mov'], true);
 
 
     echo '<!DOCTYPE html>

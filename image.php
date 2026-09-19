@@ -9,7 +9,7 @@ class Image
     public static function thumbPath(string $filename): string
     {
         $ext = pathinfo($filename, PATHINFO_EXTENSION);
-        if (in_array($ext, ['mp4', 'webm'], true)) {
+        if (in_array($ext, ['mp4', 'webm', 'mov'], true)) {
             $filename = pathinfo($filename, PATHINFO_FILENAME) . '.jpg';
         }
         return THUMB_DIR . '/' . $filename;

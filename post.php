@@ -222,6 +222,8 @@ class Post
         $ext = ALLOWED_TYPES[$mime];
         if ($mime === 'video/x-m4v') {
             $mime = 'video/mp4';
+        } elseif (in_array($mime, ['video/x-quicktime', 'application/quicktime'], true)) {
+            $mime = 'video/quicktime';
         }
 
         $md5 = md5_file($file['tmp_name']);
@@ -243,11 +245,11 @@ class Post
 
 
         $tempThumbDir = sys_get_temp_dir();
-        $thumbFilename = in_array(strtolower($ext), ['mp4', 'webm'], true)
+        $thumbFilename = in_array(strtolower($ext), ['mp4', 'webm', 'mov'], true)
             ? $md5 . '.jpg'
             : $filename;
         $tempThumbPath = $tempThumbDir . '/thumb_' . $thumbFilename;
-        $thumbMime = in_array(strtolower($ext), ['mp4', 'webm'], true) ? 'image/jpeg' : $mime;
+        $thumbMime = in_array(strtolower($ext), ['mp4', 'webm', 'mov'], true) ? 'image/jpeg' : $mime;
 
         if (!Image::makeThumbnail($file['tmp_name'], $tempThumbPath, $mime)) {
             throw new RuntimeException('Failed to generate thumbnail.');

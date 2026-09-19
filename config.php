@@ -27,6 +27,9 @@ const ALLOWED_TYPES = [
     'video/mp4'  => 'mp4',
     'video/x-m4v' => 'mp4',
     'video/webm' => 'webm',
+    'video/quicktime' => 'mov',
+    'video/x-quicktime' => 'mov',
+    'application/quicktime' => 'mov',
 ];
 
 
