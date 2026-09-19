@@ -6,8 +6,9 @@ require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../post.php';
 require_once __DIR__ . '/../view.php';
 
-$options = getopt('', ['task-id:']);
+$options = getopt('', ['task-id:', 'order:']);
 $taskId = (int)($options['task-id'] ?? 0);
+$order = strtolower((string)($options['order'] ?? 'asc')) === 'desc' ? 'DESC' : 'ASC';
 if (!$taskId) {
     die("Usage: php realbooru_tags_fetcher.php --task-id <id>\n");
 }
@@ -21,12 +22,14 @@ function realbooruTagsFromHtml(string $html): array
 {
     $tags = [];
     $categories = [];
-    if (preg_match_all('/<a class=["\']([^"\']*(?:tag-type-[^"\']+|model)[^"\']*)["\'] href=["\'][^"\']*tags=([^"\'&>]+)/i', $html, $matches, PREG_SET_ORDER)) {
+    if (preg_match_all('/<a class=["\']([^"\']*(?:tag-type-[^"\']+|model|metadata)[^"\']*)["\'] href=["\'][^"\']*tags=([^"\'&>]+)/i', $html, $matches, PREG_SET_ORDER)) {
         foreach ($matches as $match) {
             $tag = strtolower(urldecode($match[2]));
             $category = preg_match('/tag-type-([a-z_-]+)/i', $match[1], $typeMatch)
                 ? $typeMatch[1]
-                : (preg_match('/(?:^|\s)model(?:\s|$)/i', $match[1]) ? 'model' : 'general');
+                : (preg_match('/(?:^|\s)model(?:\s|$)/i', $match[1])
+                    ? 'model'
+                    : (preg_match('/(?:^|\s)metadata(?:\s|$)/i', $match[1]) ? 'meta' : 'general'));
             $tags[] = $tag;
             $categories[$tag] = Post::normalizeTagCategory($category);
         }
@@ -35,8 +38,8 @@ function realbooruTagsFromHtml(string $html): array
     return [array_values(array_unique($tags)), $categories];
 }
 
-$posts = DB::rows("SELECT id, title FROM posts WHERE title LIKE 'Realbooru #%' ORDER BY id ASC");
-logTagFetch('Starting tag fetch for ' . count($posts) . ' Realbooru posts.');
+$posts = DB::rows("SELECT id, title FROM posts WHERE title LIKE 'Realbooru #%' ORDER BY id $order");
+logTagFetch('Starting tag fetch for ' . count($posts) . ' Realbooru posts (' . strtolower($order) . 'ending local ID).');
 
 $context = stream_context_create([
     'http' => [

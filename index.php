@@ -1343,19 +1343,19 @@ function page_scraper(?array $user, string $method): void
                 if (scraperTaskIsRunning($task)) {
                     View::setFlash('Could not stop the previous scraper process.', 'error');
                 } else {
-                    $script = __DIR__ . '/scrapers/' . $task['source'] . '.php';
+                    $isRealbooruTagFetcher = ($task['tag'] ?? '') === 'Tags fetcher (all Realbooru posts)';
+                    $script = $isRealbooruTagFetcher
+                        ? __DIR__ . '/scrapers/realbooru_tags_fetcher.php'
+                        : __DIR__ . '/scrapers/' . $task['source'] . '.php';
                     $logFile = __DIR__ . '/data/scraper_' . $taskId . '.log';
-                    $blacklistArg = $task['source'] === 'e621'
+                    $blacklistArg = $task['source'] === 'e621' && !$isRealbooruTagFetcher
                         ? ' --blacklist ' . escapeshellarg((string)$task['blacklist'])
                         : '';
-                    $cmd = sprintf(
-                        'php %s --tag %s%s --task-id %d >> %s 2>&1 & echo $!',
-                        escapeshellarg($script),
-                        escapeshellarg((string)$task['tag']),
-                        $blacklistArg,
-                        $taskId,
-                        escapeshellarg($logFile)
-                    );
+                    $tagArg = $isRealbooruTagFetcher ? '' : ' --tag ' . escapeshellarg((string)$task['tag']);
+                    $cmd = 'php ' . escapeshellarg($script)
+                        . $tagArg . $blacklistArg
+                        . ' --task-id ' . $taskId
+                        . ' >> ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
                     $newPid = (int)shell_exec($cmd);
                     if ($newPid > 0) {
                         DB::exec("UPDATE scraper_tasks SET pid = ?, status = 'running' WHERE id = ?", [$newPid, $taskId]);

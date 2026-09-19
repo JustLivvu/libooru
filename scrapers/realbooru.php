@@ -174,12 +174,14 @@ while (true) {
 
         $tags = [];
         $tagCategories = [];
-        if (preg_match_all('/<a class=[\"\']([^\"\']*(?:tag-type-[^\"\']+|model)[^\"\']*)[\"\'] href=[\"\'][^\"\']*tags=([^\"\'&>]+)/i', $viewHtml, $matches, PREG_SET_ORDER)) {
+        if (preg_match_all('/<a class=[\"\']([^\"\']*(?:tag-type-[^\"\']+|model|metadata)[^\"\']*)[\"\'] href=[\"\'][^\"\']*tags=([^\"\'&>]+)/i', $viewHtml, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 $remoteTag = strtolower(urldecode($match[2]));
                 $category = preg_match('/tag-type-([a-z_-]+)/i', $match[1], $typeMatch)
                     ? $typeMatch[1]
-                    : (preg_match('/(?:^|\s)model(?:\s|$)/i', $match[1]) ? 'model' : 'general');
+                    : (preg_match('/(?:^|\s)model(?:\s|$)/i', $match[1])
+                        ? 'model'
+                        : (preg_match('/(?:^|\s)metadata(?:\s|$)/i', $match[1]) ? 'meta' : 'general'));
                 $tags[] = $remoteTag;
                 $tagCategories[$remoteTag] = Post::normalizeTagCategory($category);
             }
