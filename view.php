@@ -400,32 +400,10 @@ HTML;
 
     public static function sidebar(array $tags = [], ?array $user = null): void
     {
-        $quality = in_array($_GET['quality'] ?? '', ['low', 'medium', 'high', 'ultra'], true)
-                   ? $_GET['quality'] : '';
-        $qualities = [
-            ''       => 'All Qualities',
-            'low'    => 'Low (<720p)',
-            'medium' => 'Medium (720p)',
-            'high'   => 'High (FHD)',
-            'ultra'  => 'Ultra (4K)',
-        ];
-
         echo '<div id="sidebar">';
         echo '<div class="sidebar-search-heading"><h5>Search</h5><a href="' . self::url('/search-help') . '">[ search help ]</a></div>';
         echo '<form method="get" action="' . self::url('/posts') . '">';
         echo '<div class="form-group"><input type="text" name="q" placeholder="Tags..." value="' . self::e($_GET['q'] ?? '') . '" style="width:100%"></div>';
-        echo '<div class="form-group"><select name="quality" style="width:100%">';
-        foreach ($qualities as $val => $label) {
-            $sel = $quality === $val ? ' selected' : '';
-            echo '<option value="' . self::e($val) . '"' . $sel . '>' . self::e($label) . '</option>';
-        }
-        echo '</select></div>';
-        if (!empty($_GET['rating'])) {
-            echo '<input type="hidden" name="rating" value="' . self::e($_GET['rating']) . '">';
-        }
-        if (!empty($_GET['order'])) {
-            echo '<input type="hidden" name="order" value="' . self::e($_GET['order']) . '">';
-        }
         echo '<button type="submit">Search</button>';
         echo '</form>';
 
@@ -438,7 +416,7 @@ HTML;
                 $blacklistedMap = array_flip($blacklisted);
                 $tags = array_values(array_filter($tags, fn($t) => !isset($blacklistedMap[strtolower($t['name'])])));
             }
-            $tags = array_slice($tags, 0, 30);
+            $tags = array_slice($tags, 0, 40);
             if ($tags) {
                 echo '<h5>Tags</h5>';
                 echo '<ul class="tag-list">';

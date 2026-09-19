@@ -441,17 +441,11 @@ main.full-width {
   max-width: 860px;
 }
 
-.search-help-intro {
-  margin: -8px 0 28px;
-  color: var(--text-muted);
-  font-size: 15px;
-}
-
 .search-help-toc {
   display: flex;
   flex-wrap: wrap;
   gap: 7px 14px;
-  margin: -10px 0 30px;
+  margin: 0 0 30px;
   font-size: 12px;
 }
 
@@ -506,15 +500,6 @@ main.full-width {
 .search-help-examples {
   display: grid;
   gap: 7px;
-}
-
-.search-help-note {
-  margin: 8px 0 28px;
-  padding: 14px 16px;
-  border-left: 3px solid var(--text-dim);
-  background: var(--bg-card);
-  color: var(--text-muted);
-  line-height: 1.55;
 }
 
 .search-help-page .button {

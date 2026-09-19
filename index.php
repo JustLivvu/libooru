@@ -442,26 +442,6 @@ function page_posts(?array $user): void
         'canonical' => View::url('/posts', array_filter(['q' => $q, 'page' => $page > 1 ? $page : null])),
     ]);
     View::flash();
-    echo '<h1>Browse</h1>';
-
-    echo '<form method="get">';
-    echo '<input name="q" value="' . View::e($q) . '" placeholder="Search tags…"> ';
-    echo '<select name="rating"><option value="">All ratings</option>';
-    foreach (['s' => 'Safe', 'q' => 'Questionable', 'e' => 'Explicit'] as $v => $l) {
-        $sel = $rating === $v ? ' selected' : '';
-        echo "<option value=\"{$v}\"{$sel}>{$l}</option>";
-    }
-    echo '</select> ';
-    echo '<select name="order">';
-    foreach (['id DESC' => 'Newest', 'id ASC' => 'Oldest', 'score DESC' => 'Top rated'] as $v => $l) {
-        $sel = $order === $v ? ' selected' : '';
-        echo "<option value=\"{$v}\"{$sel}>{$l}</option>";
-    }
-    echo '</select> ';
-    if ($quality !== '') {
-        echo '<input type="hidden" name="quality" value="' . View::e($quality) . '"> ';
-    }
-    echo '<button>Filter</button></form>';
 
     echo '<p>' . $result['total'] . ' posts</p>';
     View::postGrid($result['posts']);
@@ -985,7 +965,6 @@ function page_search_help(?array $user): void
 
     echo '<article class="search-help-page">';
     echo '<h1>Search Cheatsheet</h1>';
-    echo '<p class="search-help-intro">Librebooru supports e621-style tag operators and metatags for metadata stored by this site. Click any example to run it.</p>';
 
     echo '<nav class="search-help-toc"><a href="#basics">Basics</a><a href="#sorting">Sorting</a><a href="#rating">Rating & files</a><a href="#size">Size & counts</a><a href="#text">Text & users</a><a href="#dates">Dates</a><a href="#ranges">Ranges</a></nav>';
 
@@ -1055,7 +1034,6 @@ function page_search_help(?array $user): void
     echo $row('-score:>25', 'Negate any metatag by adding <code>-</code> before it.');
     echo '</div></section>';
 
-    echo '<aside class="search-help-note"><strong>Not applicable to Librebooru:</strong> e621 operators for pools, sets, parent/child relationships, notes, approval status, replacements, and field locks are omitted because Librebooru does not store those objects.</aside>';
     echo '<p><a class="button" href="' . View::url('/posts') . '">Back to search</a></p>';
     echo '</article>';
     View::footer();
