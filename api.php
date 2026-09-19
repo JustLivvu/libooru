@@ -241,10 +241,10 @@ class Api
         }
 
         if ($q !== '') {
-            $tags  = DB::rows('SELECT name, count FROM tags WHERE name LIKE ?' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge(['%' . $q . '%'], $notInParams, [$limit, $offset]));
+            $tags  = DB::rows('SELECT name, count, category FROM tags WHERE name LIKE ?' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge(['%' . $q . '%'], $notInParams, [$limit, $offset]));
             $total = (int)DB::scalar('SELECT COUNT(*) FROM tags WHERE name LIKE ?' . $notInSql, array_merge(['%' . $q . '%'], $notInParams));
         } else {
-            $tags  = DB::rows('SELECT name, count FROM tags WHERE 1=1' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge($notInParams, [$limit, $offset]));
+            $tags  = DB::rows('SELECT name, count, category FROM tags WHERE 1=1' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge($notInParams, [$limit, $offset]));
             $total = (int)DB::scalar('SELECT COUNT(*) FROM tags WHERE 1=1' . $notInSql, $notInParams);
         }
         echo json_encode(['tags' => $tags, 'total' => $total]);
@@ -277,7 +277,7 @@ class Api
         }
 
 
-        $sql1 = 'SELECT name, count FROM tags
+        $sql1 = 'SELECT name, count, category FROM tags
                  WHERE name LIKE ?' . $notInSql . '
                  ORDER BY (CASE WHEN name LIKE ? THEN 0 ELSE 1 END), count DESC
                  LIMIT ?';
@@ -316,7 +316,7 @@ class Api
 
 
         if (count($byName) < $limit) {
-            $sql2 = 'SELECT name, count FROM tags
+            $sql2 = 'SELECT name, count, category FROM tags
                      WHERE name LIKE ? AND name NOT LIKE ?' . $notInSql . '
                      ORDER BY count DESC
                      LIMIT ?';

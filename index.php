@@ -431,7 +431,7 @@ function page_posts(?array $user): void
     $result = Post::search($page, POSTS_PER_PAGE, $q, $rating, $order, $quality);
     Activity::recordPostBrowsing();
 
-    $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 50');
+    $sidebarTags = DB::rows('SELECT name, count, category FROM tags ORDER BY count DESC LIMIT 50');
 
     $browseTitle = $q !== '' ? str_replace('_', ' ', $q) . ' posts' : 'Browse Posts';
     $browseDescription = $q !== ''
@@ -804,10 +804,10 @@ function page_tags(?array $user): void
     }
 
     if ($q !== '') {
-        $tags  = DB::rows('SELECT name, count FROM tags WHERE name LIKE ?' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge(['%' . $q . '%'], $notInParams, [$limit, $offset]));
+        $tags  = DB::rows('SELECT name, count, category FROM tags WHERE name LIKE ?' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge(['%' . $q . '%'], $notInParams, [$limit, $offset]));
         $total = (int)DB::scalar('SELECT COUNT(*) FROM tags WHERE name LIKE ?' . $notInSql, array_merge(['%' . $q . '%'], $notInParams));
     } else {
-        $tags  = DB::rows('SELECT name, count FROM tags WHERE 1=1' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge($notInParams, [$limit, $offset]));
+        $tags  = DB::rows('SELECT name, count, category FROM tags WHERE 1=1' . $notInSql . ' ORDER BY count DESC LIMIT ? OFFSET ?', array_merge($notInParams, [$limit, $offset]));
         $total = (int)DB::scalar('SELECT COUNT(*) FROM tags WHERE 1=1' . $notInSql, $notInParams);
     }
     $pages = (int)ceil($total / $limit);
@@ -1128,7 +1128,7 @@ function page_user_favorites(?array $user, string $targetName): void
     $page = max(1, (int)($_GET['page'] ?? 1));
     $result = Post::listFavorites((int)$target['id'], $page, POSTS_PER_PAGE);
     $favoritesPath = '/user/' . rawurlencode($target['name']) . '/favorites';
-    $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 50');
+    $sidebarTags = DB::rows('SELECT name, count, category FROM tags ORDER BY count DESC LIMIT 50');
 
     View::header($target['name'] . ' Favorites', $user, $sidebarTags);
     View::flash();
@@ -1145,7 +1145,7 @@ function page_favorites(?array $user): void
     $page   = max(1, (int)($_GET['page'] ?? 1));
     $result = Post::listFavorites((int)$user['id'], $page, POSTS_PER_PAGE);
 
-    $sidebarTags = DB::rows('SELECT name, count FROM tags ORDER BY count DESC LIMIT 50');
+    $sidebarTags = DB::rows('SELECT name, count, category FROM tags ORDER BY count DESC LIMIT 50');
     View::header('Favorites', $user, $sidebarTags);
     View::flash();
     echo '<h1>My Favorites</h1>';
@@ -1212,6 +1212,25 @@ function page_favorites_lucky(?array $user): void
 </body>
 </html>';
     exit;
+}
+
+function scraperTaskIsRunning(array $task): bool
+{
+    $pid = (int)($task['pid'] ?? 0);
+    $taskId = (int)($task['id'] ?? 0);
+    if ($pid < 1 || $taskId < 1) return false;
+
+    $cmdline = @file_get_contents('/proc/' . $pid . '/cmdline');
+    if (!is_string($cmdline) || $cmdline === '') {
+        $cmdline = (string)@shell_exec('ps -p ' . $pid . ' -o command= 2>/dev/null');
+    }
+    $script = basename((string)($task['source'] ?? 'realbooru')) . '.php';
+    if (($task['tag'] ?? '') === 'Tags fetcher (all Realbooru posts)') {
+        $script = 'realbooru_tags_fetcher.php';
+    }
+
+    return str_contains($cmdline, $script)
+        && (bool)preg_match('/--task-id(?:=|\s+)' . $taskId . '(?:\s|\x00|$)/', $cmdline);
 }
 
 function page_scraper(?array $user, string $method): void
@@ -1286,6 +1305,47 @@ function page_scraper(?array $user, string $method): void
                     View::setFlash("Failed to start scraper process.", 'error');
                 }
             }
+        } elseif ($action === 'restart') {
+            $taskId = (int)($_POST['task_id'] ?? 0);
+            $task = DB::row('SELECT * FROM scraper_tasks WHERE id = ?', [$taskId]);
+            if (!$task || !in_array($task['source'], ['realbooru', 'e621', 'rule34'], true)) {
+                View::setFlash('Scraper task not found.', 'error');
+            } elseif (!scraperTaskIsRunning($task)) {
+                View::setFlash('The scraper process is no longer running.', 'error');
+                DB::exec("UPDATE scraper_tasks SET status = 'completed' WHERE id = ?", [$taskId]);
+            } else {
+                $oldPid = (int)$task['pid'];
+                posix_kill($oldPid, SIGTERM);
+                for ($attempt = 0; $attempt < 50 && scraperTaskIsRunning($task); $attempt++) {
+                    usleep(100_000);
+                }
+
+                if (scraperTaskIsRunning($task)) {
+                    View::setFlash('Could not stop the previous scraper process.', 'error');
+                } else {
+                    $script = __DIR__ . '/scrapers/' . $task['source'] . '.php';
+                    $logFile = __DIR__ . '/data/scraper_' . $taskId . '.log';
+                    $blacklistArg = $task['source'] === 'e621'
+                        ? ' --blacklist ' . escapeshellarg((string)$task['blacklist'])
+                        : '';
+                    $cmd = sprintf(
+                        'php %s --tag %s%s --task-id %d >> %s 2>&1 & echo $!',
+                        escapeshellarg($script),
+                        escapeshellarg((string)$task['tag']),
+                        $blacklistArg,
+                        $taskId,
+                        escapeshellarg($logFile)
+                    );
+                    $newPid = (int)shell_exec($cmd);
+                    if ($newPid > 0) {
+                        DB::exec("UPDATE scraper_tasks SET pid = ?, status = 'running' WHERE id = ?", [$newPid, $taskId]);
+                        View::setFlash("Restarted scraper task #{$taskId} (PID: {$newPid}).", 'ok');
+                    } else {
+                        DB::exec("UPDATE scraper_tasks SET status = 'error' WHERE id = ?", [$taskId]);
+                        View::setFlash('Could not restart the scraper process.', 'error');
+                    }
+                }
+            }
         } elseif ($action === 'fetch_tags') {
             $script = __DIR__ . '/scrapers/realbooru_tags_fetcher.php';
             DB::exec('INSERT INTO scraper_tasks (tag, status) VALUES (?, ?)', ['Tags fetcher (all Realbooru posts)', 'starting']);
@@ -1324,12 +1384,7 @@ function page_scraper(?array $user, string $method): void
 
 
 
-            $cmdline = @file_get_contents('/proc/' . (int)$task['pid'] . '/cmdline');
-            $expectedTaskArg = "\0--task-id\0" . (int)$task['id'] . "\0";
-            $isRunning = is_string($cmdline)
-                && (str_contains($cmdline, 'realbooru.php') || str_contains($cmdline, 'realbooru_tags_fetcher.php') || str_contains($cmdline, 'e621.php') || str_contains($cmdline, 'rule34.php'))
-                && str_contains($cmdline, $expectedTaskArg);
-            if (!$isRunning) {
+            if (!scraperTaskIsRunning($task)) {
                 DB::exec("UPDATE scraper_tasks SET status = 'completed' WHERE id = ?", [$task['id']]);
                 $task['status'] = 'completed';
             }
@@ -1410,7 +1465,16 @@ function page_scraper(?array $user, string $method): void
             echo '<td>' . $t['pid'] . '</td>';
             echo '<td style="font-weight:bold; ' . $statusColor . '">' . View::e($t['status']) . '</td>';
             echo '<td>' . date('Y-m-d H:i:s', $t['created_at']) . '</td>';
-            echo '<td><a href="' . View::url('/scraper', ['log_id' => $t['id']]) . '">View Log</a></td>';
+            echo '<td><a href="' . View::url('/scraper', ['log_id' => $t['id']]) . '">View Log</a>';
+            if ($t['status'] === 'running') {
+                echo ' <form method="post" action="' . View::url('/scraper') . '" style="display:inline">';
+                View::csrfField();
+                echo '<input type="hidden" name="action" value="restart">';
+                echo '<input type="hidden" name="task_id" value="' . (int)$t['id'] . '">';
+                echo '<button type="submit" onclick="return confirm(\'Restart this scraper from its saved progress?\')">Restart</button>';
+                echo '</form>';
+            }
+            echo '</td>';
             echo '</tr>';
         }
         echo '</table>';

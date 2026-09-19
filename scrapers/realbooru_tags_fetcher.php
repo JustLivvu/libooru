@@ -20,13 +20,19 @@ function logTagFetch(string $message): void
 function realbooruTagsFromHtml(string $html): array
 {
     $tags = [];
-    if (preg_match_all('/<a class=["\'](?:tag-type-[^"\']+|model)["\'] href=["\'][^"\']*tags=([^"\'&>]+)/i', $html, $matches)) {
-        foreach ($matches[1] as $tag) {
-            $tags[] = urldecode($tag);
+    $categories = [];
+    if (preg_match_all('/<a class=["\']([^"\']*(?:tag-type-[^"\']+|model)[^"\']*)["\'] href=["\'][^"\']*tags=([^"\'&>]+)/i', $html, $matches, PREG_SET_ORDER)) {
+        foreach ($matches as $match) {
+            $tag = strtolower(urldecode($match[2]));
+            $category = preg_match('/tag-type-([a-z_-]+)/i', $match[1], $typeMatch)
+                ? $typeMatch[1]
+                : (preg_match('/(?:^|\s)model(?:\s|$)/i', $match[1]) ? 'model' : 'general');
+            $tags[] = $tag;
+            $categories[$tag] = Post::normalizeTagCategory($category);
         }
     }
     $tags[] = 'real_life';
-    return array_values(array_unique($tags));
+    return [array_values(array_unique($tags)), $categories];
 }
 
 $posts = DB::rows("SELECT id, title FROM posts WHERE title LIKE 'Realbooru #%' ORDER BY id ASC");
@@ -54,14 +60,15 @@ foreach ($posts as $post) {
         continue;
     }
 
-    $remoteTags = realbooruTagsFromHtml($html);
+    [$remoteTags, $tagCategories] = realbooruTagsFromHtml($html);
     $currentTags = array_column(Post::tagsFor((int)$post['id']), 'name');
     $mergedTags = array_values(array_unique(array_merge($currentTags, $remoteTags)));
     if (count($mergedTags) !== count($currentTags)) {
-        Post::setTags((int)$post['id'], $mergedTags);
+        Post::setTags((int)$post['id'], $mergedTags, $tagCategories);
         logTagFetch("Post #{$post['id']} / Realbooru #{$realbooruId}: added " . (count($mergedTags) - count($currentTags)) . ' tag(s).');
         $updated++;
     } else {
+        Post::setTagCategories($tagCategories);
         $unchanged++;
     }
 

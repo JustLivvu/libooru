@@ -421,7 +421,8 @@ HTML;
                 echo '<h5>Tags</h5>';
                 echo '<ul class="tag-list">';
                 foreach ($tags as $t) {
-                    echo '<li><span class="tag-link-wrap"><button type="button" class="tag-help" data-tag="' . self::e($t['name']) . '" aria-label="Explain tag ' . self::e($t['name']) . '" title="Explain this tag">?</button>';
+                    $category = Post::normalizeTagCategory((string)($t['category'] ?? 'general'));
+                    echo '<li class="tag-category-' . self::e($category) . '"><span class="tag-link-wrap"><button type="button" class="tag-help" data-tag="' . self::e($t['name']) . '" aria-label="Explain tag ' . self::e($t['name']) . '" title="Explain this tag">?</button>';
                     echo '<a href="' . self::url('/posts', ['q' => $t['name']]) . '">' . self::e($t['name']) . '</a></span>';
                     if (isset($t['count'])) echo ' <span class="tag-count">(' . $t['count'] . ')</span>';
                     echo '</li>';

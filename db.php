@@ -68,7 +68,8 @@ class DB
             CREATE TABLE IF NOT EXISTS tags (
                 id   INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-                count INTEGER NOT NULL DEFAULT 0
+                count INTEGER NOT NULL DEFAULT 0,
+                category TEXT NOT NULL DEFAULT 'general'
             );
 
             CREATE TABLE IF NOT EXISTS tag_aliases (
@@ -220,6 +221,19 @@ class DB
         if (!in_array('blacklist', $taskCols, true)) {
             $pdo->exec("ALTER TABLE scraper_tasks ADD COLUMN blacklist TEXT NOT NULL DEFAULT ''");
         }
+        $tagCols = array_column($pdo->query('PRAGMA table_info(tags)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+        if (!in_array('category', $tagCols, true)) {
+            $pdo->exec("ALTER TABLE tags ADD COLUMN category TEXT NOT NULL DEFAULT 'general'");
+        }
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_tags_category_count ON tags(category, count DESC)');
+        $pdo->exec("UPDATE tags SET category = CASE
+            WHEN name LIKE 'artist:%' THEN 'artist'
+            WHEN name LIKE 'model:%' THEN 'model'
+            WHEN name LIKE 'character:%' THEN 'character'
+            WHEN name LIKE 'copyright:%' THEN 'copyright'
+            WHEN name LIKE 'species:%' THEN 'species'
+            ELSE category END
+            WHERE category = 'general'");
         $hasBlacklist = false;
         foreach ($userCols as $col) {
             if ($col['name'] === 'blacklist') { $hasBlacklist = true; break; }

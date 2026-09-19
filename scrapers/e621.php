@@ -58,14 +58,20 @@ function e621Download(string $url, string $destination): bool
 function e621PostTags(array $post): array
 {
     $tags = [];
-    foreach (($post['tags'] ?? []) as $group) {
-        if (is_array($group)) {
-            foreach ($group as $tag) {
-                if (is_string($tag) && $tag !== '') $tags[] = strtolower($tag);
+    $categories = [];
+    foreach (($post['tags'] ?? []) as $group => $groupTags) {
+        if (is_array($groupTags)) {
+            $category = Post::normalizeTagCategory((string)$group);
+            foreach ($groupTags as $tag) {
+                if (is_string($tag) && $tag !== '') {
+                    $tag = strtolower($tag);
+                    $tags[] = $tag;
+                    $categories[$tag] = $category;
+                }
             }
         }
     }
-    return array_values(array_unique($tags));
+    return [array_values(array_unique($tags)), $categories];
 }
 
 $blacklist = preg_split('/[\s,]+/', strtolower($blacklistInput), -1, PREG_SPLIT_NO_EMPTY) ?: [];
@@ -128,7 +134,7 @@ while (true) {
         $e621Id = (int)($remotePost['id'] ?? 0);
         if ($e621Id < 1) continue;
         $pageMaxId = max($pageMaxId, $e621Id);
-        $remoteTags = e621PostTags($remotePost);
+        [$remoteTags, $tagCategories] = e621PostTags($remotePost);
 
         $blockedTags = array_values(array_intersect($blacklist, $remoteTags));
         if ($blockedTags) {
@@ -182,6 +188,7 @@ while (true) {
             'source' => $postUrl,
             'title' => 'e621 #' . $e621Id,
             'tags' => implode(' ', $remoteTags),
+            'tag_categories' => $tagCategories,
             'content_type' => 'artwork',
         ];
         $file = [

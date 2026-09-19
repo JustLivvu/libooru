@@ -47,10 +47,15 @@
   --accent-bg: #27272a;
 
   --tag-general: #38bdf8;
-  --tag-artist: #f87171;
+  --tag-artist: #facc15;
+  --tag-model: #facc15;
+  --tag-contributor: #fde047;
   --tag-copyright: #c084fc;
-  --tag-character: #4ade80;
-  --tag-meta: #fbbf24;
+  --tag-character: #fb7185;
+  --tag-species: #4ade80;
+  --tag-lore: #22d3ee;
+  --tag-meta: #60a5fa;
+  --tag-invalid: #71717a;
 
   --radius-sm: 3px;
   --radius-md: 4px;
@@ -80,10 +85,15 @@
     --accent-bg: #e4e4e7;
 
     --tag-general: #0284c7;
-    --tag-artist: #dc2626;
+    --tag-artist: #ca8a04;
+    --tag-model: #ca8a04;
+    --tag-contributor: #a16207;
     --tag-copyright: #9333ea;
-    --tag-character: #16a34a;
-    --tag-meta: #d97706;
+    --tag-character: #dc2626;
+    --tag-species: #16a34a;
+    --tag-lore: #0891b2;
+    --tag-meta: #2563eb;
+    --tag-invalid: #71717a;
 
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
@@ -341,6 +351,19 @@ main.full-width {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-right: 6px;
+}
+
+#sidebar .tag-category-artist a,
+#sidebar .tag-category-model a { color: var(--tag-artist); }
+#sidebar .tag-category-contributor a { color: var(--tag-contributor); }
+#sidebar .tag-category-character a { color: var(--tag-character); }
+#sidebar .tag-category-copyright a { color: var(--tag-copyright); }
+#sidebar .tag-category-species a { color: var(--tag-species); }
+#sidebar .tag-category-lore a { color: var(--tag-lore); }
+#sidebar .tag-category-meta a { color: var(--tag-meta); }
+#sidebar .tag-category-invalid a {
+  color: var(--tag-invalid);
+  text-decoration: line-through;
 }
 
 #sidebar .tag-list a:hover {

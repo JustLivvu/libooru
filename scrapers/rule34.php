@@ -49,6 +49,27 @@ function rule34Download(string $url, string $destination): bool
     return $bytes !== false && $bytes > 0;
 }
 
+function rule34TagCategories(int $postId): array
+{
+    $url = 'https://rule34.xxx/index.php?page=post&s=view&id=' . $postId;
+    $html = @file_get_contents($url, false, rule34Context());
+    if (!is_string($html)) return [];
+
+    $categories = [];
+    if (preg_match_all(
+        '/<li class=["\'][^"\']*tag-type-([a-z_-]+)[^"\']*["\'][^>]*>.*?<a href=["\'][^"\']*page=post(?:&amp;|&)s=list(?:&amp;|&)tags=([^"\'&>]+)/is',
+        $html,
+        $matches,
+        PREG_SET_ORDER
+    )) {
+        foreach ($matches as $match) {
+            $tag = strtolower(urldecode($match[2]));
+            $categories[$tag] = Post::normalizeTagCategory($match[1]);
+        }
+    }
+    return $categories;
+}
+
 $userId = trim(View::siteSetting('rule34_user_id'));
 $apiKey = trim(View::siteSetting('rule34_api_key'));
 if ($userId === '' || $apiKey === '') {
@@ -154,6 +175,7 @@ while (true) {
         }
 
         $remoteTags = preg_split('/\s+/', trim((string)($remotePost['tags'] ?? '')), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $tagCategories = rule34TagCategories($rule34Id);
         $postUrl = 'https://rule34.xxx/index.php?page=post&s=view&id=' . $rule34Id;
         $remoteRating = strtolower((string)($remotePost['rating'] ?? ''));
         $rating = match ($remoteRating) {
@@ -166,6 +188,7 @@ while (true) {
             'source' => $postUrl,
             'title' => 'Rule34.xxx #' . $rule34Id,
             'tags' => implode(' ', $remoteTags),
+            'tag_categories' => $tagCategories,
             'content_type' => 'artwork',
         ];
         $file = [

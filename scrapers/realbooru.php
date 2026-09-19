@@ -173,9 +173,15 @@ while (true) {
         }
 
         $tags = [];
-        if (preg_match_all('/<a class=[\"\'](?:tag-type-[^\"\']+|model)[\"\'] href=[\"\'][^\"\']*tags=([^\"\'&>]+)/i', $viewHtml, $m)) {
-            foreach ($m[1] as $t) {
-                $tags[] = urldecode($t);
+        $tagCategories = [];
+        if (preg_match_all('/<a class=[\"\']([^\"\']*(?:tag-type-[^\"\']+|model)[^\"\']*)[\"\'] href=[\"\'][^\"\']*tags=([^\"\'&>]+)/i', $viewHtml, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $remoteTag = strtolower(urldecode($match[2]));
+                $category = preg_match('/tag-type-([a-z_-]+)/i', $match[1], $typeMatch)
+                    ? $typeMatch[1]
+                    : (preg_match('/(?:^|\s)model(?:\s|$)/i', $match[1]) ? 'model' : 'general');
+                $tags[] = $remoteTag;
+                $tagCategories[$remoteTag] = Post::normalizeTagCategory($category);
             }
         }
         $tags[] = 'real_life';
@@ -194,6 +200,7 @@ while (true) {
             'source' => $viewUrl,
             'title'  => "Realbooru #" . $realbooruId,
             'tags'   => $tagStr,
+            'tag_categories' => $tagCategories,
         ];
 
         $file = [

@@ -13,6 +13,44 @@ require_once __DIR__ . '/discord_webhook.php';
 
 class Post
 {
+    public const TAG_CATEGORIES = [
+        'artist', 'model', 'contributor', 'character', 'copyright',
+        'species', 'lore', 'meta', 'invalid', 'general',
+    ];
+
+    public static function normalizeTagCategory(string $category): string
+    {
+        $category = strtolower(trim($category));
+        $category = match ($category) {
+            'metadata' => 'meta',
+            'creator' => 'artist',
+            default => $category,
+        };
+        return in_array($category, self::TAG_CATEGORIES, true) ? $category : 'general';
+    }
+
+    private static function categoryFromName(string $name): string
+    {
+        $prefix = strtolower((string)strtok($name, ':'));
+        return in_array($prefix, ['artist', 'model', 'character', 'copyright', 'species'], true)
+            ? $prefix
+            : 'general';
+    }
+
+    private static function canonicalTagCategories(array $categories): array
+    {
+        $result = [];
+        foreach ($categories as $name => $category) {
+            if (!is_string($name)) continue;
+            $canonical = self::canonicalTagName($name);
+            if ($canonical === '') continue;
+            $normalized = self::normalizeTagCategory((string)$category);
+            if ($normalized !== 'general' || !isset($result[$canonical])) {
+                $result[$canonical] = $normalized;
+            }
+        }
+        return $result;
+    }
 
     public static function canonicalTagName(string $tag): string
     {
@@ -453,15 +491,19 @@ class Post
     public static function tagsFor(int $postId): array
     {
         return DB::rows(
-            'SELECT t.name FROM tags t
+            "SELECT t.name, t.category FROM tags t
              INNER JOIN post_tags pt ON pt.tag_id = t.id
              WHERE pt.post_id = ?
-             ORDER BY t.name',
+             ORDER BY CASE t.category
+                WHEN 'artist' THEN 0 WHEN 'model' THEN 0 WHEN 'contributor' THEN 0
+                WHEN 'character' THEN 1 WHEN 'copyright' THEN 2 WHEN 'species' THEN 3
+                WHEN 'lore' THEN 4 WHEN 'meta' THEN 5 WHEN 'invalid' THEN 6 ELSE 7 END,
+                t.name",
             [$postId]
         );
     }
 
-    public static function setTags(int $postId, array $tagNames): void
+    public static function setTags(int $postId, array $tagNames, array $tagCategories = []): void
     {
 
         $old = DB::rows(
@@ -475,15 +517,44 @@ class Post
 
 
         $tagNames = self::canonicalizeTags($tagNames);
+        $tagCategories = self::canonicalTagCategories($tagCategories);
 
         foreach ($tagNames as $name) {
             if ($name === '') continue;
 
-            DB::exec('INSERT OR IGNORE INTO tags (name) VALUES (?)', [$name]);
+            $category = $tagCategories[$name] ?? self::categoryFromName($name);
+            DB::exec('INSERT OR IGNORE INTO tags (name, category) VALUES (?, ?)', [$name, $category]);
+            if ($category !== 'general') {
+                DB::exec('UPDATE tags SET category = ? WHERE name = ? COLLATE NOCASE', [$category, $name]);
+            }
             $tagId = (int)DB::scalar('SELECT id FROM tags WHERE name = ?', [$name]);
             DB::exec('INSERT OR IGNORE INTO post_tags (post_id, tag_id) VALUES (?, ?)', [$postId, $tagId]);
             DB::exec('UPDATE tags SET count = count + 1 WHERE id = ?', [$tagId]);
         }
+    }
+
+    public static function setTagCategories(array $tagCategories): int
+    {
+        $tagCategories = self::canonicalTagCategories($tagCategories);
+        if (!$tagCategories) return 0;
+
+        $updated = 0;
+        $pdo = DB::get();
+        $startedTransaction = !$pdo->inTransaction();
+        if ($startedTransaction) $pdo->beginTransaction();
+        try {
+            $statement = $pdo->prepare('UPDATE tags SET category = ? WHERE name = ? COLLATE NOCASE AND category <> ?');
+            foreach ($tagCategories as $name => $category) {
+                if ($category === 'general') continue;
+                $statement->execute([$category, $name, $category]);
+                $updated += $statement->rowCount();
+            }
+            if ($startedTransaction) $pdo->commit();
+        } catch (Throwable $e) {
+            if ($startedTransaction && $pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+        return $updated;
     }
 
 
@@ -582,7 +653,7 @@ class Post
             ));
             $tags[] = $contentType;
         }
-        if ($tags) self::setTags($postId, $tags);
+        if ($tags) self::setTags($postId, $tags, is_array($meta['tag_categories'] ?? null) ? $meta['tag_categories'] : []);
 
         try {
             DiscordWebhook::notifyNewPost($postId);
@@ -798,7 +869,7 @@ class Post
     public static function popularTags(int $limit = 20): array
     {
         return DB::rows(
-            'SELECT name, count FROM tags ORDER BY count DESC LIMIT ?',
+            'SELECT name, count, category FROM tags ORDER BY count DESC LIMIT ?',
             [$limit]
         );
     }
