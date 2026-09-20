@@ -136,6 +136,13 @@ while (true) {
         $pageMaxId = max($pageMaxId, $e621Id);
         [$remoteTags, $tagCategories] = e621PostTags($remotePost);
 
+        $globalBlockedRule = Post::matchingGlobalBlockedRule($remoteTags);
+        if ($globalBlockedRule !== null) {
+            e621Log("Skipping e621 #$e621Id (global tag rule: " . implode(' + ', $globalBlockedRule) . ').');
+            $blacklisted++;
+            continue;
+        }
+
         $blockedTags = array_values(array_intersect($blacklist, $remoteTags));
         if ($blockedTags) {
             e621Log("Skipping e621 #$e621Id (blacklist: " . implode(', ', $blockedTags) . ').');

@@ -9,6 +9,7 @@ The application has no framework, package manager, build step, or external datab
 - JPEG, PNG, GIF, WebP, MP4, WebM, and MOV uploads
 - Generated square thumbnails and video metadata through FFmpeg
 - Canonical tags, aliases, autocomplete, blacklists, and local tag explanations
+- Global banned-tag rules with AND combinations and optional cleanup of existing posts
 - e621-style search operators and metadata filters
 - Safe, questionable, and explicit ratings
 - Comments, votes, favorites, profiles, reports, and per-user API keys

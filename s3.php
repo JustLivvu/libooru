@@ -249,6 +249,33 @@ class S3Client
         return ($res['code'] >= 200 && $res['code'] < 300) || $res['code'] === 404;
     }
 
+    public function deleteObjects(array $keys): bool
+    {
+        $keys = array_values(array_unique(array_filter(array_map(
+            static fn($key): string => ltrim((string)$key, '/'),
+            $keys
+        ))));
+        if (!$keys) return true;
+        if (count($keys) > 1000) {
+            throw new InvalidArgumentException('S3 bulk deletion accepts at most 1000 keys.');
+        }
+
+        $body = '<Delete xmlns="http://s3.amazonaws.com/doc/2006-03-01/">';
+        foreach ($keys as $key) {
+            $body .= '<Object><Key>' . htmlspecialchars($key, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</Key></Object>';
+        }
+        $body .= '<Quiet>true</Quiet></Delete>';
+
+        $url = $this->getUrl('') . '?delete=';
+        $headers = $this->createSignedHeaders('POST', $url, $body, 'application/xml');
+        $headers[] = 'Content-MD5: ' . base64_encode(md5($body, true));
+        $res = $this->httpRequest('POST', $url, $headers, $body, 60);
+        if ($res['code'] < 200 || $res['code'] >= 300) return false;
+
+        $xml = @simplexml_load_string((string)$res['body']);
+        return $xml === false || !isset($xml->Error);
+    }
+
 
 
 

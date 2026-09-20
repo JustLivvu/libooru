@@ -1575,6 +1575,7 @@ function page_admin(?array $user, string $method): void
             'update_role' => 'manage_roles',
             'delete_role' => 'manage_roles',
             'site_settings' => 'manage_site_settings',
+            'global_tag_blacklist' => 'manage_site_settings',
             'webhook_settings' => 'manage_site_settings',
             'test_discord_webhook' => 'manage_site_settings',
             'storage_settings' => 'manage_storage_settings',
@@ -1722,6 +1723,17 @@ function page_admin(?array $user, string $method): void
                     }
                 }
             }
+        } elseif ($action === 'global_tag_blacklist') {
+            try {
+                Post::saveGlobalBlockedRules((string)($_POST['global_tag_blacklist'] ?? ''));
+                $removed = isset($_POST['purge_matching_posts']) ? Post::purgeGloballyBlockedPosts() : 0;
+                View::setFlash(
+                    'Global tag rules saved.' . ($removed > 0 ? " Removed {$removed} matching post(s)." : ''),
+                    'ok'
+                );
+            } catch (Throwable $e) {
+                View::setFlash('Could not save global tag rules: ' . $e->getMessage(), 'error');
+            }
         } elseif ($action === 'site_settings') {
             $discordUrl = trim((string)($_POST['discord_url'] ?? ''));
             if ($discordUrl !== '' && (strlen($discordUrl) > 2048 || !filter_var($discordUrl, FILTER_VALIDATE_URL) || !in_array(strtolower((string)parse_url($discordUrl, PHP_URL_SCHEME)), ['http', 'https'], true))) {
@@ -1844,6 +1856,7 @@ function page_admin(?array $user, string $method): void
 
         $sectionByAction = [
             'site_settings' => 'site-settings',
+            'global_tag_blacklist' => 'banned-tags',
             'webhook_settings' => 'webhooks',
             'test_discord_webhook' => 'webhooks',
             'storage_settings' => 'media-storage',
@@ -1902,6 +1915,8 @@ function page_admin(?array $user, string $method): void
     $curBanner           = View::siteSetting('site_banner');
     $curHomeHeaderImage  = View::siteSetting('home_header_image');
     $curDefaultBlacklist = View::siteSetting('default_blacklist', '');
+    $curGlobalTagBlacklist = View::siteSetting('global_tag_blacklist', '');
+    $globallyBlockedPostCount = count(Post::globallyBlockedPostIds());
     $curTermsOfService   = View::siteSetting('terms_of_service', '');
     $discordWebhookConfigured = DiscordWebhook::isValidUrl(View::siteSetting('discord_webhook_url', ''));
     $discordWebhookEnabled = View::siteSetting('discord_webhook_enabled', '0') === '1';
@@ -1947,6 +1962,22 @@ function page_admin(?array $user, string $method): void
     echo '</table>';
     renderActivityStatistics();
     renderActivityStatistics(true);
+    echo '</div></details>';
+    }
+
+
+    if (Auth::can('manage_site_settings', $user)) {
+    echo '<details class="admin-section"' . ($openSection === 'banned-tags' ? ' open' : '') . '>';
+    echo '<summary>Banned Tags <span class="admin-section-count">' . count(Post::globalBlockedRules()) . ' rules</span></summary>';
+    echo '<div class="admin-section-content">';
+    echo '<p>These rules reject posts across every uploader and scraper. Put one rule per line. Multiple tags on one line mean that all of them must occur together.</p>';
+    echo '<form method="post" style="max-width:600px; display:flex; flex-direction:column; gap:15px;">';
+    View::csrfField();
+    echo '<input type="hidden" name="action" value="global_tag_blacklist">';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Global banned tag rules</span><textarea name="global_tag_blacklist" rows="8" style="width:100%" placeholder="child&#10;young_anthro&#10;animal human&#10;anthro human">' . View::e($curGlobalTagBlacklist) . '</textarea></label>';
+    echo '<label style="display:flex; align-items:flex-start; gap:8px;"><input type="checkbox" name="purge_matching_posts" value="1" checked> <span>Delete posts already matching these rules, including their media files (' . $globallyBlockedPostCount . ' currently match)</span></label>';
+    echo '<button style="align-self:flex-start;">Save Banned Tags</button>';
+    echo '</form>';
     echo '</div></details>';
     }
 

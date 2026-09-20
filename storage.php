@@ -147,6 +147,35 @@ class Storage
         }
     }
 
+    public static function deleteMediaBatch(array $filenames): void
+    {
+        $filenames = array_values(array_unique(array_map('strval', $filenames)));
+        if (!$filenames) return;
+
+        if (self::getDriver() !== 's3') {
+            foreach ($filenames as $filename) self::deleteMedia($filename);
+            return;
+        }
+
+        $s3 = self::getS3Client();
+        if (!$s3) return;
+        foreach (array_chunk($filenames, 500) as $chunk) {
+            $keys = [];
+            foreach ($chunk as $filename) {
+                $thumbFilename = in_array(strtolower(pathinfo($filename, PATHINFO_EXTENSION)), ['mp4', 'webm', 'mov'], true)
+                    ? pathinfo($filename, PATHINFO_FILENAME) . '.jpg'
+                    : $filename;
+                $keys[] = self::s3MediaKey('uploads/' . $filename);
+                $keys[] = self::s3MediaKey('thumbs/' . $thumbFilename);
+            }
+            try {
+                if ($s3->deleteObjects($keys)) continue;
+            } catch (Throwable) {
+            }
+            foreach ($chunk as $filename) self::deleteMedia($filename);
+        }
+    }
+
 
 
 

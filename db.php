@@ -197,6 +197,11 @@ class DB
             CREATE INDEX IF NOT EXISTS idx_registration_requests_created ON registration_requests(created_at ASC);
         ");
 
+        // Keep unsafe content out globally. One line is one rule; tags on the
+        // same line must all be present (for example, "animal human").
+        $pdo->exec("INSERT OR IGNORE INTO site_settings (key, value) VALUES
+            ('global_tag_blacklist', 'child\nyoung_anthro\nanimal human\nanthro human')");
+
 
         $pdo->exec("INSERT OR IGNORE INTO roles (name, slug, permissions, is_system) VALUES ('Administrator', 'admin', '[\"*\"]', 1)");
         $pdo->exec("INSERT OR IGNORE INTO roles (name, slug, permissions, is_system) VALUES ('User', 'user', '[]', 1)");

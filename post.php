@@ -13,6 +13,8 @@ require_once __DIR__ . '/discord_webhook.php';
 
 class Post
 {
+    private static ?array $globalBlockedRules = null;
+
     public const TAG_CATEGORIES = [
         'artist', 'model', 'contributor', 'character', 'copyright',
         'species', 'lore', 'meta', 'invalid', 'general',
@@ -73,6 +75,126 @@ class Post
         ))));
     }
 
+    public static function parseGlobalBlockedRules(string $input): array
+    {
+        $rules = [];
+        foreach (preg_split('/\R+/', strtolower(trim($input)), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $line) {
+            $tags = self::canonicalizeTags(
+                preg_split('/[\s,]+/', trim($line), -1, PREG_SPLIT_NO_EMPTY) ?: []
+            );
+            if (!$tags) continue;
+            sort($tags, SORT_STRING);
+            $rules[implode("\0", $tags)] = $tags;
+        }
+        return array_values($rules);
+    }
+
+    public static function globalBlockedRules(): array
+    {
+        if (self::$globalBlockedRules === null) {
+            $value = DB::scalar("SELECT value FROM site_settings WHERE key = 'global_tag_blacklist'");
+            self::$globalBlockedRules = self::parseGlobalBlockedRules(is_string($value) ? $value : '');
+        }
+        return self::$globalBlockedRules;
+    }
+
+    public static function saveGlobalBlockedRules(string $input): array
+    {
+        $rules = self::parseGlobalBlockedRules($input);
+        if (count($rules) > 100) {
+            throw new RuntimeException('A maximum of 100 global tag rules is allowed.');
+        }
+        foreach ($rules as $rule) {
+            if (count($rule) > 10) {
+                throw new RuntimeException('A global tag rule may contain at most 10 tags.');
+            }
+        }
+        $value = implode("\n", array_map(static fn(array $rule): string => implode(' ', $rule), $rules));
+        DB::exec(
+            "INSERT INTO site_settings (key, value) VALUES ('global_tag_blacklist', ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [$value]
+        );
+        self::$globalBlockedRules = $rules;
+        return $rules;
+    }
+
+    public static function matchingGlobalBlockedRule(array $tags): ?array
+    {
+        $tagMap = array_fill_keys(self::canonicalizeTags($tags), true);
+        foreach (self::globalBlockedRules() as $rule) {
+            $matches = true;
+            foreach ($rule as $tag) {
+                if (!isset($tagMap[$tag])) {
+                    $matches = false;
+                    break;
+                }
+            }
+            if ($matches) return $rule;
+        }
+        return null;
+    }
+
+    public static function assertTagsAllowed(array $tags): void
+    {
+        $rule = self::matchingGlobalBlockedRule($tags);
+        if ($rule !== null) {
+            throw new RuntimeException('Post blocked by global tag rule: ' . implode(' + ', $rule), 422);
+        }
+    }
+
+    public static function globallyBlockedPostIds(): array
+    {
+        $ids = [];
+        foreach (self::globalBlockedRules() as $rule) {
+            $placeholders = implode(',', array_fill(0, count($rule), '?'));
+            $rows = DB::rows(
+                "SELECT pt.post_id
+                 FROM post_tags pt
+                 INNER JOIN tags t ON t.id = pt.tag_id
+                 WHERE t.name COLLATE NOCASE IN ({$placeholders})
+                 GROUP BY pt.post_id
+                 HAVING COUNT(DISTINCT LOWER(t.name)) = " . count($rule),
+                $rule
+            );
+            foreach ($rows as $row) $ids[(int)$row['post_id']] = true;
+        }
+        $result = array_keys($ids);
+        sort($result, SORT_NUMERIC);
+        return $result;
+    }
+
+    public static function purgeGloballyBlockedPosts(): int
+    {
+        $postIds = self::globallyBlockedPostIds();
+        if (!$postIds) return 0;
+
+        $filenames = [];
+        foreach (array_chunk($postIds, 500) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            foreach (DB::rows("SELECT filename FROM posts WHERE id IN ({$placeholders})", $chunk) as $post) {
+                $filenames[] = (string)$post['filename'];
+            }
+        }
+        Storage::deleteMediaBatch($filenames);
+
+        $pdo = DB::get();
+        $startedTransaction = !$pdo->inTransaction();
+        if ($startedTransaction) $pdo->beginTransaction();
+        try {
+            foreach (array_chunk($postIds, 500) as $chunk) {
+                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+                DB::exec("DELETE FROM posts WHERE id IN ({$placeholders})", $chunk);
+            }
+            DB::exec('UPDATE tags SET count = (SELECT COUNT(*) FROM post_tags WHERE tag_id = tags.id)');
+            if ($startedTransaction) $pdo->commit();
+        } catch (Throwable $e) {
+            if ($startedTransaction && $pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+        return count($postIds);
+    }
+
     public static function aliasTargetsForQuery(string $query): array
     {
         $needle = strtolower((string)preg_replace('/\s+/', '_', trim($query)));
@@ -90,6 +212,7 @@ class Post
         $post = DB::row('SELECT * FROM posts WHERE id = ?', [$id]);
         if ($post) {
             $post['tags'] = self::tagsFor($id);
+            if (self::matchingGlobalBlockedRule(array_column($post['tags'], 'name')) !== null) return null;
         }
         return $post;
     }
@@ -180,6 +303,16 @@ class Post
         if ($orTerms) {
             $conditions[] = '(' . implode(' OR ', array_column($orTerms, 0)) . ')';
             foreach ($orTerms as [, $orParams]) array_push($params, ...$orParams);
+        }
+
+        foreach (self::globalBlockedRules() as $rule) {
+            $ruleConditions = [];
+            foreach ($rule as $blockedTag) {
+                [$condition, $conditionParams] = self::tagSearchCondition($blockedTag, false);
+                $ruleConditions[] = $condition;
+                array_push($params, ...$conditionParams);
+            }
+            $conditions[] = 'NOT (' . implode(' AND ', $ruleConditions) . ')';
         }
 
         $user = class_exists('Auth') ? Auth::current() : null;
@@ -506,6 +639,8 @@ class Post
     public static function setTags(int $postId, array $tagNames, array $tagCategories = []): void
     {
 
+        self::assertTagsAllowed($tagNames);
+
         $old = DB::rows(
             'SELECT t.id FROM tags t INNER JOIN post_tags pt ON pt.tag_id = t.id WHERE pt.post_id = ?',
             [$postId]
@@ -570,6 +705,15 @@ class Post
         if ($contentType !== null && !in_array($contentType, ['artwork', 'real_life'], true)) {
             throw new RuntimeException('Invalid content type.');
         }
+        $tags = preg_split('/[\s,]+/', trim($meta['tags'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if ($contentType !== null) {
+            $tags = array_values(array_filter(
+                $tags,
+                fn($tag) => !in_array(strtolower($tag), ['drawn', 'artwork', 'real_life'], true)
+            ));
+            $tags[] = $contentType;
+        }
+        self::assertTagsAllowed($tags);
         if ($file['error'] !== UPLOAD_ERR_OK) {
             throw new RuntimeException(self::uploadError($file['error']));
         }
@@ -645,14 +789,6 @@ class Post
         );
         $postId = (int)DB::lastId();
 
-        $tags = preg_split('/[\s,]+/', trim($meta['tags'] ?? ''), -1, PREG_SPLIT_NO_EMPTY);
-        if ($contentType !== null) {
-            $tags = array_values(array_filter(
-                $tags,
-                fn($tag) => !in_array(strtolower($tag), ['drawn', 'artwork', 'real_life'], true)
-            ));
-            $tags[] = $contentType;
-        }
         if ($tags) self::setTags($postId, $tags, is_array($meta['tag_categories'] ?? null) ? $meta['tag_categories'] : []);
 
         try {
@@ -666,6 +802,11 @@ class Post
 
     public static function update(int $id, array $meta): void
     {
+        $tags = null;
+        if (isset($meta['tags'])) {
+            $tags = preg_split('/[\s,]+/', trim($meta['tags']), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            self::assertTagsAllowed($tags);
+        }
         $rating = in_array($meta['rating'] ?? '', ['s', 'q', 'e'], true) ? $meta['rating'] : 'q';
         DB::exec(
             'UPDATE posts SET rating = ?, source = ?, title = ? WHERE id = ?',
@@ -676,8 +817,7 @@ class Post
                 $id,
             ]
         );
-        if (isset($meta['tags'])) {
-            $tags = preg_split('/[\s,]+/', trim($meta['tags']), -1, PREG_SPLIT_NO_EMPTY);
+        if ($tags !== null) {
             self::setTags($id, $tags);
         }
     }
