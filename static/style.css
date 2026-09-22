@@ -32,6 +32,7 @@
 :root {
   --bg-main: #09090b;
   --bg-card: #18181b;
+  --bg-sidebar: #111113;
   --bg-elevated: #27272a;
   --bg-input: #18181b;
 
@@ -70,6 +71,7 @@
   :root {
     --bg-main: #fafafa;
     --bg-card: #ffffff;
+    --bg-sidebar: #ffffff;
     --bg-elevated: #f4f4f5;
     --bg-input: #ffffff;
 
@@ -280,7 +282,7 @@ header nav {
 }
 
 .site-header {
-  padding: 0 16px;
+  padding: 0;
   border-bottom: 0;
   background: var(--bg-main);
 }
@@ -339,8 +341,8 @@ header nav {
   align-items: center;
   gap: 0;
   min-height: 32px;
-  margin: 0 -16px;
-  padding: 0 16px;
+  margin: 0;
+  padding: 0;
   border: 0;
   background: var(--bg-card);
 }
@@ -376,10 +378,9 @@ header nav {
 
 #container {
   display: flex;
-  max-width: 1600px;
-  margin: 0 auto;
-  margin-top: var(--header-height, 60px);
-  padding: 24px;
+  width: 100%;
+  margin: var(--header-height, 60px) 0 0;
+  padding: 24px 0;
   gap: 32px;
   min-height: calc(100vh - var(--header-height, 60px));
 }
@@ -397,6 +398,12 @@ main.full-width {
 #sidebar {
   width: 220px;
   flex-shrink: 0;
+  align-self: flex-start;
+  margin-left: 8px;
+  padding: 14px 10px 16px 0;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--bg-sidebar);
 }
 
 #sidebar h5 {
@@ -1532,12 +1539,12 @@ footer {
 
   #container {
     flex-direction: column;
-    padding: 12px;
+    padding: 12px 0;
     gap: 20px;
   }
 
   #sidebar {
-    width: 100%;
+    width: calc(100% - 8px);
     order: 2;
   }
 
@@ -1573,7 +1580,7 @@ footer {
   }
 
   .site-header {
-    padding: 0 12px;
+    padding: 0;
   }
 
   .site-header .site-nav {
@@ -1596,8 +1603,8 @@ footer {
   }
 
   .site-subnav {
-    margin: 0 -12px;
-    padding: 0 12px;
+    margin: 0;
+    padding: 0;
   }
 
   .site-nav {

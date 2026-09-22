@@ -14,7 +14,7 @@ define('SITE_BASE',    '');
 
 
 define('SITE_URL',     rtrim((string)(getenv('LIBOORU_SITE_URL') ?: ''), '/'));
-define('POSTS_PER_PAGE', 48);
+define('POSTS_PER_PAGE', 75);
 define('THUMB_WIDTH',  450);
 define('THUMB_HEIGHT', 450);
 
