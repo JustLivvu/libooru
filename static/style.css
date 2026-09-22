@@ -388,6 +388,10 @@ header nav {
   min-height: calc(100vh - var(--header-height, 60px));
 }
 
+#container:has(.post-listing) {
+  column-gap: 12px;
+}
+
 main {
   flex-grow: 1;
   min-width: 0;
@@ -407,6 +411,21 @@ main.full-width {
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--bg-sidebar);
+}
+
+@media (min-width: 851px) {
+  #container:has(.post-listing) #sidebar {
+    align-self: stretch;
+  }
+
+  #container:has(.post-listing) main {
+    display: flex;
+    flex-direction: column;
+  }
+
+  #container:has(.post-listing) .post-listing {
+    flex: 1;
+  }
 }
 
 #sidebar h5 {
@@ -901,6 +920,21 @@ h3 {
   display: none;
 }
 
+.post-listing {
+  padding: 14px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-sidebar);
+}
+
+.post-listing .post-grid {
+  margin-bottom: 0;
+}
+
+.post-listing .pagination {
+  margin: 0;
+  background: transparent;
+}
+
 .post-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -1050,41 +1084,92 @@ form select, form input[name="q"] {
 
 
 .pagination {
-  margin: 32px 0;
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  width: 100%;
+  min-height: 128px;
+  margin: 24px 0;
+  padding: 56px 12px 24px;
+  background: var(--bg-card);
 }
 
-.pagination a {
-  padding: 6px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+.pagination a,
+.pagination .pagination-arrow,
+.pagination .ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 48px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
   color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 500;
-  background: var(--bg-card);
-  transition: all 0.15s ease;
+  font-size: 15px;
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 .pagination a:hover {
   color: var(--text-main);
-  border-color: var(--border-hover);
   background: var(--bg-elevated);
   text-decoration: none;
 }
 
 .pagination a.active {
-  background: var(--text-main);
-  color: var(--bg-main);
-  border-color: var(--text-main);
+  background: var(--accent-bg);
+  color: var(--text-main);
   font-weight: 600;
 }
 
+.pagination .pagination-arrow {
+  min-width: 48px;
+}
+
+.pagination .pagination-arrow svg {
+  width: 18px;
+  height: 18px;
+}
+
+.pagination .pagination-arrow.next svg {
+  transform: rotate(180deg);
+}
+
+.pagination .pagination-arrow.is-disabled {
+  opacity: 0.65;
+}
+
 .pagination .ellipsis {
-  padding: 6px 8px;
-  color: var(--text-dim);
+  letter-spacing: 2px;
+}
+
+.pagination a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .pagination {
+    min-height: 88px;
+    padding: 24px 6px;
+  }
+
+  .pagination a,
+  .pagination .pagination-arrow,
+  .pagination .ellipsis {
+    min-width: 32px;
+    height: 40px;
+    padding: 0 6px;
+    font-size: 14px;
+  }
+
+  .pagination .pagination-arrow {
+    min-width: 38px;
+  }
 }
 
 

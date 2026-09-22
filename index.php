@@ -448,9 +448,10 @@ function page_posts(?array $user): void
     ]);
     View::flash();
 
-    echo '<p>' . $result['total'] . ' posts</p>';
+    echo '<section class="post-listing" aria-label="Posts">';
     View::postGrid($result['posts']);
     View::paginator($page, $result['pages'], '/posts', array_filter(['q' => $q, 'rating' => $rating, 'order' => $order, 'quality' => $quality]));
+    echo '</section>';
     View::footer();
 }
 
@@ -1168,8 +1169,10 @@ function page_user(?array $user, string $targetName): void
     }
     echo '</tbody></table></div>';
     echo '<h2>Posts</h2>';
+    echo '<section class="post-listing" aria-label="Posts">';
     View::postGrid($myPosts);
     View::paginator($page, $myPages, '/user/' . rawurlencode($target['name']));
+    echo '</section>';
     View::footer();
 }
 
@@ -1203,8 +1206,10 @@ function page_user_favorites(?array $user, string $targetName): void
     View::flash();
     echo '<h1>' . View::e($target['name']) . '’s Favorites</h1>';
     echo '<p>' . $result['total'] . ' favorite posts</p>';
+    echo '<section class="post-listing" aria-label="Favorite posts">';
     View::postGrid($result['posts']);
     View::paginator($page, $result['pages'], $favoritesPath);
+    echo '</section>';
     View::footer();
 }
 
@@ -1222,8 +1227,10 @@ function page_favorites(?array $user): void
     if ($result['total'] > 0) {
         echo '<p><a href="' . View::url('/favorites/lucky') . '" class="button">Lucky draw</a></p>';
     }
+    echo '<section class="post-listing" aria-label="Favorite posts">';
     View::postGrid($result['posts']);
     View::paginator($page, $result['pages'], '/favorites');
+    echo '</section>';
     View::footer();
 }
 

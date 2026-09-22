@@ -379,44 +379,51 @@ HTML;
     {
         if ($totalPages <= 1) return;
 
-        echo '<nav class="pagination">';
+        $currentPage = max(1, min($currentPage, $totalPages));
+        $chevron = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>';
+        echo '<nav class="pagination" aria-label="Pagination">';
 
-        if ($totalPages <= 10) {
+        if ($totalPages <= 7) {
             $pagesToShow = range(1, $totalPages);
         } else {
-
-
-            $pagesToShow = array_merge(
-                [1, 2],
-                range(max(1, $currentPage - 2), min($totalPages, $currentPage + 2)),
-                [$totalPages - 1, $totalPages]
-            );
-            $pagesToShow = array_values(array_unique(array_filter(
-                $pagesToShow,
-                fn(int $page) => $page >= 1 && $page <= $totalPages
-            )));
+            if ($currentPage <= 5) {
+                $window = range(1, max(5, $currentPage + 2));
+            } elseif ($currentPage >= $totalPages - 4) {
+                $window = range(min($totalPages - 4, $currentPage - 2), $totalPages);
+            } else {
+                $window = range($currentPage - 2, $currentPage + 2);
+            }
+            $pagesToShow = array_values(array_unique(array_merge([1], $window, [$totalPages])));
             sort($pagesToShow);
         }
 
         if ($currentPage > 1) {
             $url = self::url($basePath, array_merge($params, ['page' => $currentPage - 1]));
-            echo '<a href="' . self::e($url) . '" aria-label="Previous page">‹ Prev</a> ';
+            echo '<a class="pagination-arrow" href="' . self::e($url) . '" aria-label="Previous page">' . $chevron . '</a>';
+        } else {
+            echo '<span class="pagination-arrow is-disabled" aria-hidden="true">' . $chevron . '</span>';
         }
 
         $prev = null;
         foreach ($pagesToShow as $i) {
-            if ($prev !== null && $i > $prev + 1) {
-                echo '<span class="ellipsis">[ ... ]</span> ';
+            if ($prev !== null && $i === $prev + 2) {
+                $missingPage = $prev + 1;
+                $missingUrl = self::url($basePath, array_merge($params, ['page' => $missingPage]));
+                echo '<a href="' . self::e($missingUrl) . '">' . $missingPage . '</a>';
+            } elseif ($prev !== null && $i > $prev + 2) {
+                echo '<span class="ellipsis" aria-hidden="true">…</span>';
             }
             $url    = self::url($basePath, array_merge($params, ['page' => $i]));
             $active = ($i === $currentPage) ? ' class="active" aria-current="page"' : '';
-            echo "<a href=\"{$url}\"{$active}>{$i}</a> ";
+            echo '<a href="' . self::e($url) . '"' . $active . '>' . $i . '</a>';
             $prev = $i;
         }
 
         if ($currentPage < $totalPages) {
             $url = self::url($basePath, array_merge($params, ['page' => $currentPage + 1]));
-            echo '<a href="' . self::e($url) . '" aria-label="Next page">Next ›</a>';
+            echo '<a class="pagination-arrow next" href="' . self::e($url) . '" aria-label="Next page">' . $chevron . '</a>';
+        } else {
+            echo '<span class="pagination-arrow next is-disabled" aria-hidden="true">' . $chevron . '</span>';
         }
 
         echo '</nav>';
