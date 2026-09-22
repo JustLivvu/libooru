@@ -34,6 +34,7 @@ const ALLOWED_TYPES = [
 
 // Canonical names for equivalent tags imported from different booru sites.
 const TAG_ALIASES = [
+    'digital_media_(artwork)' => 'artwork',
     'butt' => 'ass',
     'booty' => 'ass',
     'buttocks' => 'ass',

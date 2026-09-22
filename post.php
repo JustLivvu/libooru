@@ -333,7 +333,7 @@ class Post
 
     private static function tokenizeSearch(string $query): array
     {
-        preg_match_all('/\(|\)|(?:[^\s()"]+|"[^"]*")+/', trim($query), $matches);
+        preg_match_all('/(?:[^\s()"]+|"[^"]*")(?:[^\s()"]+|"[^"]*"|\([^()\s]+\))*|\(|\)/', trim($query), $matches);
         return array_slice($matches[0] ?? [], 0, 80);
     }
 
