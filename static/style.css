@@ -1325,6 +1325,31 @@ footer {
 }
 
 
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.admin-tabs a {
+  padding: 9px 16px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.admin-tabs a:hover {
+  color: var(--text-main);
+  background: var(--bg-elevated);
+}
+
+.admin-tabs a.active,
+.admin-tabs a.active:hover {
+  color: #f4f4f5;
+  background: #18181b;
+}
+
 .admin-section {
   margin: 12px 0;
   background: var(--bg-card);

@@ -383,7 +383,8 @@ function page_home(?array $user): void
         echo '    <a href="' . View::url('/favorites') . '">Favorites</a>';
         echo '    <a style="margin-left: auto;" href="' . View::url('/user/' . rawurlencode($user['name'])) . '">My Account</a>';
         echo '    <a href="' . View::url('/settings') . '">Settings</a>';
-        if (Auth::can('access_admin_panel', $user)) {
+        if (Auth::can('access_admin_panel', $user) || Auth::can('manage_post_reports', $user)
+            || Auth::can('manage_database_backups', $user) || Auth::can('manage_scraper', $user)) {
             echo '    <a href="' . View::url('/admin') . '">Panel</a>';
         }
         echo '    <a href="' . View::url('/logout') . '">Logout</a>';
@@ -1301,6 +1302,18 @@ function scraperTaskIsRunning(array $task): bool
         && (bool)preg_match('/--task-id(?:=|\s+)' . $taskId . '(?:\s|\x00|$)/', $cmdline);
 }
 
+function renderAdminTabs(?array $user, string $active): void
+{
+    echo '<nav class="admin-tabs" aria-label="Admin sections">';
+    echo '<a' . ($active === 'panel' ? ' class="active" aria-current="page"' : '')
+        . ' href="' . View::url('/admin') . '">Panel</a>';
+    if (Auth::can('manage_scraper', $user)) {
+        echo '<a' . ($active === 'scraper' ? ' class="active" aria-current="page"' : '')
+            . ' href="' . View::url('/scraper') . '">Scraper</a>';
+    }
+    echo '</nav>';
+}
+
 function page_scraper(?array $user, string $method): void
 {
     Auth::requirePermission('manage_scraper');
@@ -1467,6 +1480,7 @@ function page_scraper(?array $user, string $method): void
     $rule34ApiConfigured = View::siteSetting('rule34_api_key') !== '';
 
     echo '<h1>Scraper Management</h1>';
+    renderAdminTabs($user, 'scraper');
 
     echo '<div class="form-container">';
     echo '<h2>Start New Scraper</h2>';
@@ -1606,7 +1620,8 @@ function renderActivityStatistics(bool $browsing = false): void
 
 function page_admin(?array $user, string $method): void
 {
-    if (!Auth::can('access_admin_panel', $user) && !Auth::can('manage_post_reports', $user) && !Auth::can('manage_database_backups', $user)) {
+    if (!Auth::can('access_admin_panel', $user) && !Auth::can('manage_post_reports', $user)
+        && !Auth::can('manage_database_backups', $user) && !Auth::can('manage_scraper', $user)) {
         Router::redirect('/');
     }
     $permissionCatalog = Auth::permissionCatalog();
@@ -1994,6 +2009,7 @@ function page_admin(?array $user, string $method): void
     View::header('Panel', $user);
     View::flash();
     echo '<h1>Panel</h1>';
+    renderAdminTabs($user, 'panel');
 
 
     if (Auth::can('access_admin_panel', $user)) {

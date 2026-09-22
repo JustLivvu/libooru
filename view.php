@@ -254,11 +254,12 @@ HTML;
         if ($user) {
             echo '    <a class="navbar-account-link" href="' . $e(SITE_BASE) . '/user/' . $e($user['name']) . '">' . $e($user['name']) . '</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/settings">Settings</a>' . "\n";
-            if (Auth::can('access_admin_panel', $user) || Auth::can('manage_post_reports', $user) || Auth::can('manage_database_backups', $user)) {
-                echo '    <a href="' . $e(SITE_BASE) . '/admin">Panel</a>' . "\n";
-            }
-            if (Auth::can('manage_scraper', $user)) {
-                echo '    <a href="' . $e(SITE_BASE) . '/scraper">Scraper</a>' . "\n";
+            if (Auth::can('access_admin_panel', $user) || Auth::can('manage_post_reports', $user)
+                || Auth::can('manage_database_backups', $user) || Auth::can('manage_scraper', $user)) {
+                $panelClass = in_array($relativePath, ['/admin', '/scraper'], true)
+                    ? ' class="navbar-current"' . ($relativePath === '/admin' ? ' aria-current="page"' : '')
+                    : '';
+                echo '    <a' . $panelClass . ' href="' . $e(SITE_BASE) . '/admin">Panel</a>' . "\n";
             }
             echo '    <a href="' . $e(SITE_BASE) . '/logout">Logout</a>' . "\n";
         } else {
