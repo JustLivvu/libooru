@@ -478,7 +478,6 @@ function page_comments(?array $user): void
         'description' => 'Recent comments on posts at ' . View::siteSetting('site_name', SITE_NAME) . '.',
         'canonical' => View::url('/comments', $page > 1 ? ['page' => $page] : []),
     ]);
-    echo '<h1>Comments</h1>';
     if (!$comments) {
         echo '<p>No comments yet.</p>';
     } else {
@@ -810,7 +809,6 @@ function page_upload(?array $user, string $method): void
     View::header('Upload', $user);
     View::flash();
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
-    echo '<h1>Upload</h1>';
     echo '<form method="post" enctype="multipart/form-data" class="upload-form">';
     View::csrfField();
     $maxMb = MAX_FILE_SIZE / 1024 / 1024;
@@ -864,14 +862,12 @@ function page_tags(?array $user): void
 
     View::header('Tags', $user);
     View::flash();
-    echo '<h1>Tags</h1>';
-    echo '<form method="get"><input name="q" value="' . View::e($q) . '" placeholder="Search tags…"> <button>Search</button></form>';
-    echo '<p>' . $total . ' tags</p>';
-    echo '<ul class="tag-list">';
+    echo '<table class="tags-table">';
+    echo '<thead><tr><th scope="col">Tag</th><th scope="col">Posts</th></tr></thead><tbody>';
     foreach ($tags as $t) {
-        echo '<li><a href="' . View::url('/posts', ['q' => $t['name']]) . '">' . View::e($t['name']) . '</a> <span>(' . View::e($t['count']) . ')</span></li>';
+        echo '<tr><td><a href="' . View::e(View::url('/posts', ['q' => $t['name']])) . '">' . View::e($t['name']) . '</a></td><td>' . View::e($t['count']) . '</td></tr>';
     }
-    echo '</ul>';
+    echo '</tbody></table>';
     View::paginator($page, $pages, '/tags', $q ? ['q' => $q] : []);
     View::footer();
 }
@@ -896,7 +892,6 @@ function page_login(?array $user, string $method): void
 
     View::header('Login', null);
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
-    echo '<h1>Login</h1>';
     echo '<form method="post" style="display: flex; flex-direction: column; gap: 16px; max-width: 300px;">';
     View::csrfField();
     echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Username</span><input name="name" required autofocus></label>';
@@ -966,7 +961,6 @@ function page_register(?array $user, string $method): void
     }
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
     if ($success) echo '<p class="flash flash-ok">' . View::e($success) . '</p>';
-    echo '<h1>Register</h1>';
     echo '<form method="post" style="display: flex; flex-direction: column; gap: 16px; max-width: 300px;">';
     View::csrfField();
     echo '<label style="display: flex; flex-direction: column; gap: 4px;"><span>Username (2–32 chars)</span><input name="name" required autofocus></label>';
@@ -992,7 +986,6 @@ function page_terms(?array $user): void
     $terms = trim(View::siteSetting('terms_of_service', ''));
     if ($terms === '') $terms = 'Terms of Service have not been published yet.';
     View::header('Terms of Service', $user);
-    echo '<h1>Terms of Service</h1>';
     echo '<div style="max-width:800px; white-space:pre-wrap; line-height:1.6;">' . View::e($terms) . '</div>';
     View::footer();
 }
@@ -1014,8 +1007,6 @@ function page_search_help(?array $user): void
     };
 
     echo '<article class="search-help-page">';
-    echo '<h1>Search Cheatsheet</h1>';
-
     echo '<nav class="search-help-toc"><a href="#basics">Basics</a><a href="#species">Species & tag colors</a><a href="#sorting">Sorting</a><a href="#rating">Rating & files</a><a href="#size">Size & counts</a><a href="#text">Text & users</a><a href="#dates">Dates</a><a href="#ranges">Ranges</a></nav>';
 
     echo '<section id="basics"><h2>Basics</h2><div class="search-help-table">';
@@ -1204,7 +1195,6 @@ function page_user_favorites(?array $user, string $targetName): void
 
     View::header($target['name'] . ' Favorites', $user, $sidebarTags);
     View::flash();
-    echo '<h1>' . View::e($target['name']) . '’s Favorites</h1>';
     echo '<p>' . $result['total'] . ' favorite posts</p>';
     echo '<section class="post-listing" aria-label="Favorite posts">';
     View::postGrid($result['posts']);
@@ -1222,7 +1212,6 @@ function page_favorites(?array $user): void
     $sidebarTags = DB::rows('SELECT name, count, category FROM tags ORDER BY count DESC LIMIT 50');
     View::header('Favorites', $user, $sidebarTags);
     View::flash();
-    echo '<h1>My Favorites</h1>';
     echo '<p>' . $result['total'] . ' favorite posts</p>';
     if ($result['total'] > 0) {
         echo '<p><a href="' . View::url('/favorites/lucky') . '" class="button">Lucky draw</a></p>';
@@ -1486,7 +1475,6 @@ function page_scraper(?array $user, string $method): void
     $rule34UserId = View::siteSetting('rule34_user_id');
     $rule34ApiConfigured = View::siteSetting('rule34_api_key') !== '';
 
-    echo '<h1>Scraper Management</h1>';
     renderAdminTabs($user, 'scraper');
 
     echo '<div class="form-container">';
@@ -2015,7 +2003,6 @@ function page_admin(?array $user, string $method): void
 
     View::header('Panel', $user);
     View::flash();
-    echo '<h1>Panel</h1>';
     renderAdminTabs($user, 'panel');
 
 
@@ -2549,8 +2536,6 @@ function page_settings(?array $user, string $method): void
 
     View::header('Settings', $user);
     View::flash();
-    echo '<h1>Account Settings</h1>';
-
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
 
     echo '<h2>Profile</h2>';

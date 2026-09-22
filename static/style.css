@@ -384,12 +384,8 @@ header nav {
   width: calc(100% - var(--page-right-margin));
   margin: var(--header-height, 60px) var(--page-right-margin) 0 0;
   padding: 24px 0;
-  gap: 32px;
+  gap: 12px;
   min-height: calc(100vh - var(--header-height, 60px));
-}
-
-#container:has(.post-listing) {
-  column-gap: 12px;
 }
 
 main {
@@ -399,6 +395,19 @@ main {
 
 main.full-width {
   width: 100%;
+}
+
+#container > main:not(:has(.gelbooru-home)) {
+  align-self: stretch;
+  min-height: calc(100vh - var(--header-height, 60px) - 48px);
+  padding: 14px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-sidebar);
+}
+
+#container > main.full-width:not(:has(.gelbooru-home)) {
+  width: calc(100% - 8px);
+  margin-left: 8px;
 }
 
 
@@ -921,9 +930,7 @@ h3 {
 }
 
 .post-listing {
-  padding: 14px 12px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-sidebar);
+  min-width: 0;
 }
 
 .post-listing .post-grid {
@@ -932,7 +939,39 @@ h3 {
 
 .post-listing .pagination {
   margin: 0;
-  background: transparent;
+}
+
+.tags-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.tags-table th,
+.tags-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+}
+
+.tags-table th {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tags-table th:last-child,
+.tags-table td:last-child {
+  width: 100px;
+  text-align: right;
+}
+
+.tags-table td:first-child {
+  overflow-wrap: anywhere;
+}
+
+.tags-table tbody tr:hover {
+  background: var(--bg-card);
 }
 
 .post-grid {
@@ -1093,7 +1132,7 @@ form select, form input[name="q"] {
   min-height: 128px;
   margin: 24px 0;
   padding: 56px 12px 24px;
-  background: var(--bg-card);
+  background: transparent;
 }
 
 .pagination a,
@@ -1629,6 +1668,10 @@ footer {
     flex-direction: column;
     padding: 12px 0;
     gap: 20px;
+  }
+
+  #container > main:not(:has(.gelbooru-home)) {
+    min-height: calc(100vh - var(--header-height, 60px) - 24px);
   }
 
   #sidebar {
