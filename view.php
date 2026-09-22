@@ -99,14 +99,16 @@ class View
         $relativePath = SITE_BASE !== '' && str_starts_with($requestPath, SITE_BASE)
             ? (substr($requestPath, strlen(SITE_BASE)) ?: '/')
             : $requestPath;
+        $showSiteHeader = $relativePath !== '/';
         $postsPage = $relativePath === '/posts';
-        $headerClass = $postsPage ? ' class="posts-header"' : '';
-        $postsLinkLabel = $postsPage ? 'Posts' : 'Browse';
-        $postsLinkClass = $postsPage ? ' class="navbar-current" aria-current="page"' : '';
+        $headerClass = $showSiteHeader ? ' class="site-header"' : '';
+        $postsLinkLabel = $showSiteHeader ? 'Posts' : 'Browse';
+        $postsLinkClass = ($postsPage || str_starts_with($relativePath, '/post/'))
+            ? ' class="navbar-current" aria-current="page"' : '';
         $uploadLinkClass = $relativePath === '/upload' ? ' class="navbar-current" aria-current="page"' : '';
         $tagsLinkClass = $relativePath === '/tags' ? ' class="navbar-current" aria-current="page"' : '';
         $commentsLinkClass = $relativePath === '/comments' ? ' class="navbar-current" aria-current="page"' : '';
-        $sidebarToggleLabel = $postsPage ? 'Filters' : 'Search';
+        $sidebarToggleLabel = $showSiteHeader ? 'Filters' : 'Search';
         $isPublicPage = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && http_response_code() < 400
             && (bool)preg_match('#^/(?:$|posts$|comments$|tags$|terms$|search-help$|post/\d+$)#', $relativePath);
         $robots = (string)($meta['robots'] ?? ($isPublicPage ? 'index,follow,max-image-preview:large' : 'noindex,follow'));
@@ -267,9 +269,9 @@ HTML;
     </div>
   </nav>
 HTML;
-        if ($postsPage) {
+        if ($showSiteHeader) {
             echo <<<HTML
-  <div class="posts-subnav" role="navigation" aria-label="Posts navigation">
+  <div class="site-subnav" role="navigation" aria-label="Quick links">
     <a href="{$e(SITE_BASE)}/posts">Listing</a>
     <a href="{$e(SITE_BASE)}/posts?order=score%20DESC">Top</a>
     <a href="{$e(SITE_BASE)}/search-help">Help</a>

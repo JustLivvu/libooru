@@ -112,7 +112,7 @@ html:has(.navbar-brand-banner) {
   --header-height: 165px;
 }
 
-html:has(.posts-header) {
+html:has(.site-header) {
   --header-height: 76px;
 }
 
@@ -279,20 +279,20 @@ header nav {
   display: none;
 }
 
-.posts-header {
+.site-header {
   padding: 0 16px;
   border-bottom: 0;
   background: var(--bg-main);
 }
 
-.posts-header .site-nav {
+.site-header .site-nav {
   max-width: none;
   height: 36px;
   align-items: stretch;
   gap: 0;
 }
 
-.posts-header .navbar-brand {
+.site-header .navbar-brand {
   display: flex;
   align-items: center;
   align-self: stretch;
@@ -300,17 +300,17 @@ header nav {
   font-size: 17px;
 }
 
-.posts-header .navbar-brand-image,
-.posts-header .navbar-brand-banner {
+.site-header .navbar-brand-image,
+.site-header .navbar-brand-banner {
   height: 30px;
 }
 
-.posts-header .navbar-links {
+.site-header .navbar-links {
   align-items: stretch;
   gap: 0;
 }
 
-.posts-header .site-nav a {
+.site-header .site-nav a {
   display: flex;
   align-items: center;
   padding: 0 11px;
@@ -319,22 +319,22 @@ header nav {
   white-space: nowrap;
 }
 
-.posts-header .site-nav a:hover {
+.site-header .site-nav a:hover {
   color: var(--text-main);
   background: var(--bg-elevated);
 }
 
-.posts-header .site-nav .navbar-current,
-.posts-header .site-nav .navbar-current:hover {
+.site-header .site-nav .navbar-current,
+.site-header .site-nav .navbar-current:hover {
   color: #f4f4f5;
   background: #18181b;
 }
 
-.posts-header .site-nav .navbar-brand:hover {
+.site-header .site-nav .navbar-brand:hover {
   background: transparent;
 }
 
-.posts-subnav {
+.site-subnav {
   display: flex;
   align-items: center;
   gap: 0;
@@ -345,7 +345,7 @@ header nav {
   background: var(--bg-card);
 }
 
-.posts-subnav a {
+.site-subnav a {
   flex-shrink: 0;
   padding: 6px 8px;
   border: 0;
@@ -357,12 +357,12 @@ header nav {
   cursor: pointer;
 }
 
-.posts-subnav a:hover {
+.site-subnav a:hover {
   background: var(--bg-elevated);
   color: var(--text-main);
 }
 
-.posts-subnav a:focus-visible {
+.site-subnav a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1484,7 +1484,7 @@ footer {
     --header-height: 65px;
   }
 
-  html:has(.posts-header) {
+  html:has(.site-header) {
     --header-height: 82px;
   }
 
@@ -1541,30 +1541,30 @@ footer {
     padding: 8px 12px;
   }
 
-  .posts-header {
+  .site-header {
     padding: 0 12px;
   }
 
-  .posts-header .site-nav {
+  .site-header .site-nav {
     height: 44px;
   }
 
-  .posts-header .navbar-menu-toggle,
-  .posts-header .navbar-search-toggle {
+  .site-header .navbar-menu-toggle,
+  .site-header .navbar-search-toggle {
     color: var(--text-main);
     min-height: 44px;
   }
 
-  .posts-header .navbar-links {
+  .site-header .navbar-links {
     background: var(--bg-main);
     border-color: var(--border-color);
   }
 
-  .posts-header .navbar-links a {
+  .site-header .navbar-links a {
     white-space: normal;
   }
 
-  .posts-subnav {
+  .site-subnav {
     margin: 0 -12px;
     padding: 0 12px;
   }
