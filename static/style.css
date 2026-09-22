@@ -30,6 +30,7 @@
 .profile-help { color: var(--text-muted); margin: 0; }
 
 :root {
+  --page-right-margin: 20px;
   --bg-main: #09090b;
   --bg-card: #18181b;
   --bg-sidebar: #111113;
@@ -282,6 +283,7 @@ header nav {
 }
 
 .site-header {
+  margin: 0 var(--page-right-margin) 0 8px;
   padding: 0;
   border-bottom: 0;
   background: var(--bg-main);
@@ -344,6 +346,7 @@ header nav {
   margin: 0;
   padding: 0;
   border: 0;
+  border-radius: var(--radius-md);
   background: var(--bg-card);
 }
 
@@ -378,8 +381,8 @@ header nav {
 
 #container {
   display: flex;
-  width: 100%;
-  margin: var(--header-height, 60px) 0 0;
+  width: calc(100% - var(--page-right-margin));
+  margin: var(--header-height, 60px) var(--page-right-margin) 0 0;
   padding: 24px 0;
   gap: 32px;
   min-height: calc(100vh - var(--header-height, 60px));
