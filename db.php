@@ -193,6 +193,7 @@ class DB
             CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
             CREATE INDEX IF NOT EXISTS idx_favorites_post ON favorites(post_id);
             CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id);
+            CREATE INDEX IF NOT EXISTS idx_comments_recent ON comments(created_at DESC, id DESC);
             CREATE INDEX IF NOT EXISTS idx_post_reports_status_created ON post_reports(status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_registration_requests_created ON registration_requests(created_at ASC);
         ");

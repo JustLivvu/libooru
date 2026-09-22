@@ -248,6 +248,10 @@ function dispatch(string $method, string $path): void
         page_posts($user);
     }
 
+    elseif ($path === '/comments') {
+        page_comments($user);
+    }
+
     elseif (preg_match('#^/post/(\d+)$#', $path, $m)) {
         if ($method === 'POST') {
             post_handle($user, (int)$m[1]);
@@ -449,6 +453,50 @@ function page_posts(?array $user): void
     View::footer();
 }
 
+function page_comments(?array $user): void
+{
+    if (!$user && View::siteSetting('require_login_posts', '0') === '1') {
+        Router::redirect('/login');
+    }
+
+    $perPage = 30;
+    $total = (int)DB::scalar('SELECT COUNT(*) FROM comments');
+    $pages = (int)ceil($total / $perPage);
+    $page = min(max(1, (int)($_GET['page'] ?? 1)), max(1, $pages));
+    $comments = DB::rows(
+        'SELECT c.id, c.post_id, c.guest_name, c.body, c.created_at, u.name AS user_name
+         FROM comments c
+         LEFT JOIN users u ON u.id = c.user_id
+         ORDER BY c.created_at DESC, c.id DESC
+         LIMIT ? OFFSET ?',
+        [$perPage, ($page - 1) * $perPage]
+    );
+
+    View::header('Comments', $user, null, [
+        'description' => 'Recent comments on posts at ' . View::siteSetting('site_name', SITE_NAME) . '.',
+        'canonical' => View::url('/comments', $page > 1 ? ['page' => $page] : []),
+    ]);
+    echo '<h1>Comments</h1>';
+    if (!$comments) {
+        echo '<p>No comments yet.</p>';
+    } else {
+        echo '<div class="comment-feed">';
+        foreach ($comments as $comment) {
+            $author = $comment['user_name'] ?? $comment['guest_name'] ?? 'Anonymous';
+            $postUrl = View::url('/post/' . (int)$comment['post_id']) . '#comment-' . (int)$comment['id'];
+            echo '<article class="comment">';
+            echo '<span class="comment-author">' . View::e($author) . '</span> ';
+            echo '<span class="comment-date">' . date('Y-m-d H:i', (int)$comment['created_at']) . '</span>';
+            echo ' <a class="comment-post-link" href="' . View::e($postUrl) . '">Post #' . (int)$comment['post_id'] . '</a>';
+            echo '<p>' . nl2br(View::e($comment['body'])) . '</p>';
+            echo '</article>';
+        }
+        echo '</div>';
+    }
+    View::paginator($page, $pages, '/comments');
+    View::footer();
+}
+
 function page_post(?array $user, int $id): void
 {
     if (!$user && View::siteSetting('require_login_posts', '0') === '1') {
@@ -601,7 +649,7 @@ function page_post(?array $user, int $id): void
     echo '<h2>Comments (' . count($comments) . ')</h2>';
     foreach ($comments as $c) {
         $author = $c['user_name'] ?? $c['guest_name'] ?? 'Anonymous';
-        echo '<div class="comment">';
+        echo '<div class="comment" id="comment-' . (int)$c['id'] . '">';
         echo '<span class="comment-author">' . View::e($author) . '</span> ';
         echo '<span class="comment-date">' . date('Y-m-d H:i', (int)$c['created_at']) . '</span>';
         if ($canModerateComments) {

@@ -103,9 +103,12 @@ class View
         $headerClass = $postsPage ? ' class="posts-header"' : '';
         $postsLinkLabel = $postsPage ? 'Posts' : 'Browse';
         $postsLinkClass = $postsPage ? ' class="navbar-current" aria-current="page"' : '';
+        $uploadLinkClass = $relativePath === '/upload' ? ' class="navbar-current" aria-current="page"' : '';
+        $tagsLinkClass = $relativePath === '/tags' ? ' class="navbar-current" aria-current="page"' : '';
+        $commentsLinkClass = $relativePath === '/comments' ? ' class="navbar-current" aria-current="page"' : '';
         $sidebarToggleLabel = $postsPage ? 'Filters' : 'Search';
         $isPublicPage = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && http_response_code() < 400
-            && (bool)preg_match('#^/(?:$|posts$|tags$|terms$|search-help$|post/\d+$)#', $relativePath);
+            && (bool)preg_match('#^/(?:$|posts$|comments$|tags$|terms$|search-help$|post/\d+$)#', $relativePath);
         $robots = (string)($meta['robots'] ?? ($isPublicPage ? 'index,follow,max-image-preview:large' : 'noindex,follow'));
         $image = array_key_exists('image', $meta)
             ? (string)$meta['image']
@@ -240,8 +243,9 @@ HTML;
     <button class="navbar-menu-toggle" type="button" aria-controls="navbar-links" aria-expanded="false">Menu <span aria-hidden="true">☰</span></button>
     <div class="navbar-links" id="navbar-links">
     <a{$postsLinkClass} href="{$e(SITE_BASE)}/posts">{$postsLinkLabel}</a>
-    <a href="{$e(SITE_BASE)}/upload">Upload</a>
-    <a href="{$e(SITE_BASE)}/tags">Tags</a>
+    <a{$uploadLinkClass} href="{$e(SITE_BASE)}/upload">Upload</a>
+    <a{$tagsLinkClass} href="{$e(SITE_BASE)}/tags">Tags</a>
+    <a{$commentsLinkClass} href="{$e(SITE_BASE)}/comments">Comments</a>
 
 HTML;
         if ($user) {
@@ -276,6 +280,17 @@ HTML;
 </header>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+  const header = document.querySelector('body > header');
+  const updateHeaderHeight = () => {
+    document.documentElement.style.setProperty('--header-height', header.offsetHeight + 'px');
+  };
+  updateHeaderHeight();
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(updateHeaderHeight).observe(header);
+  } else {
+    window.addEventListener('resize', updateHeaderHeight);
+  }
+
   const menuButton = document.querySelector('.navbar-menu-toggle');
   const links = document.getElementById('navbar-links');
   const searchButton = document.querySelector('.navbar-search-toggle');

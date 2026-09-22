@@ -51,7 +51,7 @@ function page_sitemap_pages(): void
     seoXmlHeaders();
     $paths = ['/', '/tags', '/search-help', '/terms'];
     if (View::siteSetting('require_login_posts', '0') !== '1') {
-        array_splice($paths, 1, 0, ['/posts']);
+        array_splice($paths, 1, 0, ['/posts', '/comments']);
     }
 
     echo '<?xml version="1.0" encoding="UTF-8"?>';

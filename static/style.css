@@ -108,6 +108,14 @@ html {
   scroll-behavior: smooth;
 }
 
+html:has(.navbar-brand-banner) {
+  --header-height: 165px;
+}
+
+html:has(.posts-header) {
+  --header-height: 76px;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -185,8 +193,10 @@ a:hover {
 
 
 header {
-  position: sticky;
+  position: absolute;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
   background-color: var(--bg-main);
   border-bottom: 1px solid var(--border-color);
@@ -221,6 +231,11 @@ header nav {
 .site-nav a:hover {
   color: var(--text-main);
   background-color: var(--bg-elevated);
+}
+
+.site-nav .navbar-current {
+  color: #f4f4f5;
+  background-color: #18181b;
 }
 
 .site-nav .navbar-brand {
@@ -266,12 +281,14 @@ header nav {
 
 .posts-header {
   padding: 0 16px;
+  border-bottom: 0;
   background: var(--bg-main);
 }
 
 .posts-header .site-nav {
   max-width: none;
-  min-height: 36px;
+  height: 36px;
+  align-items: stretch;
   gap: 0;
 }
 
@@ -289,20 +306,28 @@ header nav {
 }
 
 .posts-header .navbar-links {
+  align-items: stretch;
   gap: 0;
 }
 
 .posts-header .site-nav a {
-  padding: 7px 11px;
+  display: flex;
+  align-items: center;
+  padding: 0 11px;
   border-radius: 0;
   color: var(--text-muted);
   white-space: nowrap;
 }
 
-.posts-header .site-nav a:hover,
-.posts-header .site-nav .navbar-current {
+.posts-header .site-nav a:hover {
   color: var(--text-main);
   background: var(--bg-elevated);
+}
+
+.posts-header .site-nav .navbar-current,
+.posts-header .site-nav .navbar-current:hover {
+  color: #f4f4f5;
+  background: #18181b;
 }
 
 .posts-header .site-nav .navbar-brand:hover {
@@ -312,17 +337,17 @@ header nav {
 .posts-subnav {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 0;
   min-height: 32px;
   margin: 0 -16px;
-  padding: 3px 16px;
-  border-top: 1px solid var(--border-color);
+  padding: 0 16px;
+  border: 0;
   background: var(--bg-card);
 }
 
 .posts-subnav a {
   flex-shrink: 0;
-  padding: 4px 8px;
+  padding: 6px 8px;
   border: 0;
   border-radius: 2px;
   background: transparent;
@@ -347,9 +372,10 @@ header nav {
   display: flex;
   max-width: 1600px;
   margin: 0 auto;
+  margin-top: var(--header-height, 60px);
   padding: 24px;
   gap: 32px;
-  min-height: calc(100vh - 60px);
+  min-height: calc(100vh - var(--header-height, 60px));
 }
 
 main {
@@ -1076,6 +1102,20 @@ form select, form input[name="q"] {
   color: var(--text-muted);
 }
 
+.comment-feed {
+  max-width: 900px;
+}
+
+.comment-feed .comment p {
+  overflow-wrap: anywhere;
+}
+
+.comment-post-link {
+  margin-left: 8px;
+  color: var(--tag-general);
+  font-size: 13px;
+}
+
 
 .flash {
   margin: 0 0 16px;
@@ -1440,6 +1480,14 @@ footer {
 }
 
 @media (max-width: 850px) {
+  html:has(.navbar-brand-banner) {
+    --header-height: 65px;
+  }
+
+  html:has(.posts-header) {
+    --header-height: 82px;
+  }
+
   .gelbooru-home {
     padding: 28px 16px 48px;
   }
@@ -1494,16 +1542,17 @@ footer {
   }
 
   .posts-header {
-    padding: 4px 12px 0;
+    padding: 0 12px;
   }
 
   .posts-header .site-nav {
-    min-height: 44px;
+    height: 44px;
   }
 
   .posts-header .navbar-menu-toggle,
   .posts-header .navbar-search-toggle {
     color: var(--text-main);
+    min-height: 44px;
   }
 
   .posts-header .navbar-links {
@@ -1516,9 +1565,8 @@ footer {
   }
 
   .posts-subnav {
-    gap: 0;
     margin: 0 -12px;
-    padding: 5px 12px;
+    padding: 0 12px;
   }
 
   .site-nav {
