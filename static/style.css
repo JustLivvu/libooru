@@ -423,7 +423,8 @@ main.full-width {
 }
 
 @media (min-width: 851px) {
-  #container:has(.post-listing) #sidebar {
+  #container:has(.post-listing) #sidebar,
+  #container:has(.post-view) #sidebar {
     align-self: stretch;
   }
 
@@ -974,6 +975,50 @@ h3 {
   background: var(--bg-card);
 }
 
+.discord-page {
+  width: 100%;
+  padding: 12px 4px;
+}
+
+.discord-lead {
+  margin: 0 0 18px;
+  color: var(--text-main);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.discord-info {
+  margin: 0 0 24px;
+  padding-left: 20px;
+  color: var(--text-muted);
+}
+
+.discord-info li + li {
+  margin-top: 8px;
+}
+
+.discord-join-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.discord-join-button:hover {
+  background: var(--border-hover);
+  color: var(--text-main);
+}
+
+.discord-unavailable {
+  margin: 0;
+  color: var(--text-muted);
+}
+
 .post-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -1011,20 +1056,27 @@ h3 {
   transform: scale(1.04);
 }
 
-.post-thumb.is-video {
-  border: 2px solid #38bdf8;
-}
-
-.post-thumb.is-video:hover {
-  border-color: #0284c7;
+.post-thumb.is-video,
+.post-thumb.is-gif {
+  --post-corner-color: #38bdf8;
 }
 
 .post-thumb.is-gif {
-  border: 2px solid #4ade80;
+  --post-corner-color: #4ade80;
 }
 
-.post-thumb.is-gif:hover {
-  border-color: #16a34a;
+.post-thumb.is-video::after,
+.post-thumb.is-gif::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  background: var(--post-corner-color);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  pointer-events: none;
 }
 
 
@@ -1325,12 +1377,6 @@ body:has(.gelbooru-home) header {
   object-fit: contain;
   padding-bottom: 16px;
   margin: 0 0 24px;
-}
-
-.gelbooru-discord-link {
-  margin-bottom: 16px;
-  font-size: 14px;
-  text-underline-offset: 3px;
 }
 
 .gelbooru-subnav {

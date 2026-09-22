@@ -284,6 +284,10 @@ function dispatch(string $method, string $path): void
         page_tags($user);
     }
 
+    elseif ($path === '/discord') {
+        page_discord($user);
+    }
+
     elseif ($path === '/scraper') {
         page_scraper($user, $method);
     }
@@ -369,11 +373,6 @@ function page_home(?array $user): void
         echo '  <h1 class="gelbooru-title">' . $e($siteName) . '</h1>';
     }
 
-
-    $discordUrl = View::siteSetting('discord_url', '');
-    if (filter_var($discordUrl, FILTER_VALIDATE_URL) && in_array(strtolower((string)parse_url($discordUrl, PHP_URL_SCHEME)), ['http', 'https'], true)) {
-        echo '  <a class="gelbooru-discord-link" href="' . $e($discordUrl) . '" target="_blank" rel="noopener noreferrer">Join our Discord server</a>';
-    }
 
     echo '  <div class="gelbooru-subnav">';
     echo '    <a href="' . View::url('/posts') . '">Browse Posts</a>';
@@ -987,6 +986,35 @@ function page_terms(?array $user): void
     if ($terms === '') $terms = 'Terms of Service have not been published yet.';
     View::header('Terms of Service', $user);
     echo '<div style="max-width:800px; white-space:pre-wrap; line-height:1.6;">' . View::e($terms) . '</div>';
+    View::footer();
+}
+
+function page_discord(?array $user): void
+{
+    $siteName = View::siteSetting('site_name', SITE_NAME);
+    $discordUrl = trim(View::siteSetting('discord_url', ''));
+    $hasInvite = filter_var($discordUrl, FILTER_VALIDATE_URL)
+        && in_array(strtolower((string)parse_url($discordUrl, PHP_URL_SCHEME)), ['http', 'https'], true);
+
+    View::header('Discord', $user, null, [
+        'description' => 'Join the ' . $siteName . ' community on Discord.',
+        'canonical' => View::url('/discord'),
+        'image' => false,
+    ]);
+
+    echo '<section class="discord-page">';
+    echo '<p class="discord-lead">Join the ' . View::e($siteName) . ' community on Discord.</p>';
+    echo '<ul class="discord-info">';
+    echo '<li>Talk with other members of the community.</li>';
+    echo '<li>Share feedback, ideas and suggestions for the site.</li>';
+    echo '<li>Follow site news and important announcements.</li>';
+    echo '</ul>';
+    if ($hasInvite) {
+        echo '<a class="discord-join-button" href="' . View::e($discordUrl) . '" target="_blank" rel="noopener noreferrer">Join Discord</a>';
+    } else {
+        echo '<p class="discord-unavailable">The Discord invitation is currently unavailable.</p>';
+    }
+    echo '</section>';
     View::footer();
 }
 

@@ -49,7 +49,7 @@ function page_sitemap_index(): void
 function page_sitemap_pages(): void
 {
     seoXmlHeaders();
-    $paths = ['/', '/tags', '/search-help', '/terms'];
+    $paths = ['/', '/tags', '/discord', '/search-help', '/terms'];
     if (View::siteSetting('require_login_posts', '0') !== '1') {
         array_splice($paths, 1, 0, ['/posts', '/comments']);
     }
