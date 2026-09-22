@@ -99,6 +99,11 @@ class View
         $relativePath = SITE_BASE !== '' && str_starts_with($requestPath, SITE_BASE)
             ? (substr($requestPath, strlen(SITE_BASE)) ?: '/')
             : $requestPath;
+        $postsPage = $relativePath === '/posts';
+        $headerClass = $postsPage ? ' class="posts-header"' : '';
+        $postsLinkLabel = $postsPage ? 'Posts' : 'Browse';
+        $postsLinkClass = $postsPage ? ' class="navbar-current" aria-current="page"' : '';
+        $sidebarToggleLabel = $postsPage ? 'Filters' : 'Search';
         $isPublicPage = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && http_response_code() < 400
             && (bool)preg_match('#^/(?:$|posts$|tags$|terms$|search-help$|post/\d+$)#', $relativePath);
         $robots = (string)($meta['robots'] ?? ($isPublicPage ? 'index,follow,max-image-preview:large' : 'noindex,follow'));
@@ -224,17 +229,17 @@ HTML;
 HTML;
         }
         echo <<<HTML
-<header>
+<header{$headerClass}>
   <nav class="site-nav" aria-label="Main navigation">
     <a class="navbar-brand" href="{$e(SITE_BASE)}/">{$brand}</a>
 HTML;
         if ($sidebarTags !== null) {
-            echo '    <button class="navbar-search-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Search</button>' . "\n";
+            echo '    <button class="navbar-search-toggle" type="button" aria-controls="sidebar" aria-expanded="false">' . $sidebarToggleLabel . '</button>' . "\n";
         }
         echo <<<HTML
     <button class="navbar-menu-toggle" type="button" aria-controls="navbar-links" aria-expanded="false">Menu <span aria-hidden="true">☰</span></button>
     <div class="navbar-links" id="navbar-links">
-    <a href="{$e(SITE_BASE)}/posts">Browse</a>
+    <a{$postsLinkClass} href="{$e(SITE_BASE)}/posts">{$postsLinkLabel}</a>
     <a href="{$e(SITE_BASE)}/upload">Upload</a>
     <a href="{$e(SITE_BASE)}/tags">Tags</a>
 
@@ -257,6 +262,17 @@ HTML;
         echo <<<HTML
     </div>
   </nav>
+HTML;
+        if ($postsPage) {
+            echo <<<HTML
+  <div class="posts-subnav" role="navigation" aria-label="Posts navigation">
+    <a href="{$e(SITE_BASE)}/posts">Listing</a>
+    <a href="{$e(SITE_BASE)}/posts?order=score%20DESC">Top</a>
+    <a href="{$e(SITE_BASE)}/search-help">Help</a>
+  </div>
+HTML;
+        }
+        echo <<<HTML
 </header>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
