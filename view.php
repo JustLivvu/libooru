@@ -341,7 +341,8 @@ document.addEventListener('DOMContentLoaded', () => {
 <div id="container">
 HTML;
         if ($sidebarTags !== null) {
-            self::sidebar($sidebarTags, $user);
+            $sidebarOptions = is_array($meta['sidebar'] ?? null) ? $meta['sidebar'] : [];
+            self::sidebar($sidebarTags, $user, $sidebarOptions);
             echo '<main>';
         } else {
             echo '<main class="full-width">';
@@ -488,8 +489,11 @@ HTML;
 
 
 
-    public static function sidebar(array $tags = [], ?array $user = null): void
+    public static function sidebar(array $tags = [], ?array $user = null, array $options = []): void
     {
+        $groupTags = !empty($options['group_tags']);
+        $source = trim((string)($options['source'] ?? ''));
+        $details = is_array($options['details'] ?? null) ? $options['details'] : [];
         echo '<div id="sidebar">';
         echo '<div class="sidebar-search-heading"><h5>Search</h5><a href="' . self::url('/search-help') . '">[ search help ]</a></div>';
         echo '<form method="get" action="' . self::url('/posts') . '">';
@@ -506,19 +510,73 @@ HTML;
                 $blacklistedMap = array_flip($blacklisted);
                 $tags = array_values(array_filter($tags, fn($t) => !isset($blacklistedMap[strtolower($t['name'])])));
             }
-            $tags = array_slice($tags, 0, 40);
+            if (!$groupTags) {
+                $tags = array_slice($tags, 0, 40);
+            }
             if ($tags) {
-                echo '<h5>Tags</h5>';
-                echo '<ul class="tag-list">';
-                foreach ($tags as $t) {
+                $renderTag = static function (array $t): void {
                     $category = Post::normalizeTagCategory((string)($t['category'] ?? 'general'));
                     echo '<li class="tag-category-' . self::e($category) . '"><span class="tag-link-wrap"><button type="button" class="tag-help" data-tag="' . self::e($t['name']) . '" aria-label="Explain tag ' . self::e($t['name']) . '" title="Explain this tag">?</button>';
                     echo '<a href="' . self::url('/posts', ['q' => $t['name']]) . '">' . self::e($t['name']) . '</a></span>';
                     if (isset($t['count'])) echo ' <span class="tag-count">(' . $t['count'] . ')</span>';
                     echo '</li>';
+                };
+
+                if ($groupTags) {
+                    $labels = [
+                        'artist' => 'Author',
+                        'model' => 'Models',
+                        'contributor' => 'Contributors',
+                        'character' => 'Characters',
+                        'copyright' => 'Copyrights',
+                        'species' => 'Species',
+                        'lore' => 'Lore',
+                        'meta' => 'Meta',
+                        'invalid' => 'Invalid',
+                        'general' => 'General',
+                    ];
+                    $groups = [];
+                    foreach ($tags as $t) {
+                        $category = Post::normalizeTagCategory((string)($t['category'] ?? 'general'));
+                        $groups[$category][] = $t;
+                    }
+                    foreach ($labels as $category => $label) {
+                        if (empty($groups[$category])) continue;
+                        echo '<section class="sidebar-tag-group"><h5>' . self::e($label) . '</h5><ul class="tag-list">';
+                        foreach ($groups[$category] as $t) $renderTag($t);
+                        echo '</ul></section>';
+                    }
+                } else {
+                    echo '<h5>Tags</h5><ul class="tag-list">';
+                    foreach ($tags as $t) $renderTag($t);
+                    echo '</ul>';
                 }
-                echo '</ul>';
             }
+        }
+
+        if ($details || $source !== '') {
+            echo '<section class="sidebar-post-details"><h5>Information</h5>';
+            if ($source !== '') {
+                echo '<div class="sidebar-info-source"><strong>Source:</strong>';
+                $sourceScheme = strtolower((string)parse_url($source, PHP_URL_SCHEME));
+                if (filter_var($source, FILTER_VALIDATE_URL) && in_array($sourceScheme, ['http', 'https'], true)) {
+                    echo '<a href="' . self::e($source) . '" target="_blank" rel="nofollow noopener noreferrer">' . self::e($source) . '</a>';
+                } else {
+                    echo '<span>' . self::e($source) . '</span>';
+                }
+                echo '</div>';
+            }
+            echo '<dl>';
+            foreach ($details as $label => $value) {
+                echo '<dt>' . self::e($label) . '</dt><dd>';
+                if ($label === 'MD5') {
+                    echo '<code>' . self::e($value) . '</code>';
+                } else {
+                    echo self::e($value);
+                }
+                echo '</dd>';
+            }
+            echo '</dl></section>';
         }
 
         echo '</div>';

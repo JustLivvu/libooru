@@ -532,6 +532,7 @@ function page_post(?array $user, int $id): void
     $tagNames = array_column($tags, 'name');
     $readableTags = array_map(fn($tag) => str_replace('_', ' ', $tag), array_slice($tagNames, 0, 8));
     $postTitle = trim((string)($post['title'] ?? ''));
+    $postHeading = $postTitle !== '' ? $postTitle : 'Post #' . $id;
     if ($postTitle === '') {
         $postTitle = $readableTags
             ? implode(', ', array_slice($readableTags, 0, 4)) . ' - Post #' . $id
@@ -540,6 +541,15 @@ function page_post(?array $user, int $id): void
     $description = 'View post #' . $id;
     if ($readableTags) $description .= ' tagged ' . implode(', ', $readableTags);
     $description .= ' on ' . View::siteSetting('site_name', SITE_NAME) . '.';
+    $posterName = $post['user_id']
+        ? (DB::scalar('SELECT name FROM users WHERE id = ?', [$post['user_id']]) ?: 'unknown')
+        : 'Anonymous';
+    $ratingLabel = match($post['rating']) {
+        's' => 'Safe',
+        'q' => 'Questionable',
+        'e' => 'Explicit',
+        default => (string)$post['rating'],
+    };
 
     View::header($postTitle, $user, $tags, [
         'description' => $description,
@@ -547,6 +557,17 @@ function page_post(?array $user, int $id): void
         'type' => 'article',
         'image' => $thumbUrl,
         'image_alt' => $readableTags ? implode(', ', $readableTags) : 'Post #' . $id,
+        'sidebar' => [
+            'group_tags' => true,
+            'source' => (string)($post['source'] ?? ''),
+            'details' => [
+                'Rating' => $ratingLabel,
+                'Size' => $post['width'] . '×' . $post['height'] . ' — ' . round($post['filesize'] / 1024, 1) . ' KB',
+                'MD5' => (string)$post['md5'],
+                'Uploaded by' => (string)$posterName,
+                'Date' => date('Y-m-d H:i', (int)$post['created_at']),
+            ],
+        ],
         'json_ld' => [
             '@context' => 'https://schema.org',
             '@type' => 'ImageObject',
@@ -567,7 +588,7 @@ function page_post(?array $user, int $id): void
     $hasPendingReport = $user && Post::hasPendingReport($id, (int)$user['id']);
 
     echo '<article class="post-view">';
-    echo '<h1>Post #' . View::e($id) . '</h1>';
+    echo '<h1>' . View::e($postHeading) . '</h1>';
 
     echo '<div class="post-image">';
     $ext = pathinfo($post['filename'], PATHINFO_EXTENSION);
@@ -581,33 +602,24 @@ function page_post(?array $user, int $id): void
     echo '</div>';
 
 
-    echo '<dl class="post-info">';
-    echo '<dt>Rating</dt><dd>' . View::e(match($post['rating']) {'s' => 'Safe', 'q' => 'Questionable', 'e' => 'Explicit', default => $post['rating']}) . '</dd>';
-    echo '<dt>Score</dt><dd>' . View::e($post['score']);
+    echo '<div class="post-actions">';
+    $upChevron = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>';
+    $downChevron = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
     if ($user) {
-        echo ' <form method="post" action="' . View::url('/post/' . $id) . '" style="display:inline">';
+        echo '<form class="post-score-control" method="post" action="' . View::url('/post/' . $id) . '">';
         View::csrfField();
         echo '<input type="hidden" name="action" value="vote">';
-        echo '<button name="value" value="1">+</button> ';
-        echo '<button name="value" value="-1">−</button>';
+        echo '<button type="submit" name="value" value="1" aria-label="Upvote">' . $upChevron . '</button>';
+        echo '<span class="post-score-value" aria-label="Score ' . View::e($post['score']) . '">' . View::e($post['score']) . '</span>';
+        echo '<button type="submit" name="value" value="-1" aria-label="Downvote">' . $downChevron . '</button>';
         echo '</form>';
+    } else {
+        echo '<div class="post-score-control" aria-label="Score ' . View::e($post['score']) . '">';
+        echo '<span class="post-score-button is-disabled">' . $upChevron . '</span>';
+        echo '<span class="post-score-value">' . View::e($post['score']) . '</span>';
+        echo '<span class="post-score-button is-disabled">' . $downChevron . '</span>';
+        echo '</div>';
     }
-    echo '</dd>';
-    if ($post['title']) echo '<dt>Title</dt><dd>' . View::e($post['title']) . '</dd>';
-    if ($post['source']) echo '<dt>Source</dt><dd><a href="' . View::e($post['source']) . '" rel="nofollow">' . View::e($post['source']) . '</a></dd>';
-    echo '<dt>Size</dt><dd>' . View::e($post['width'] . '×' . $post['height']) . ' — ' . View::e(round($post['filesize'] / 1024, 1)) . ' KB</dd>';
-    echo '<dt>MD5</dt><dd><code>' . View::e($post['md5']) . '</code></dd>';
-    $posterName = $post['user_id']
-        ? (DB::scalar('SELECT name FROM users WHERE id = ?', [$post['user_id']]) ?: 'unknown')
-        : 'Anonymous';
-    echo '<dt>Uploaded by</dt><dd>' . View::e($posterName) . '</dd>';
-    echo '<dt>Date</dt><dd>' . date('Y-m-d H:i', (int)$post['created_at']) . '</dd>';
-    echo '</dl>';
-
-
-
-
-    echo '<div class="post-actions">';
     if ($user) {
         $isFav = Post::isFavorite($id, (int)$user['id']);
         echo '<form method="post" action="' . View::url('/post/' . $id) . '" style="display:inline">';
@@ -623,14 +635,42 @@ function page_post(?array $user, int $id): void
         if ($hasPendingReport) {
             echo '<span>Report pending review.</span> ';
         } else {
-            echo '<details style="display:inline-block;vertical-align:top"><summary class="button" style="cursor:pointer">Report post</summary>';
-            echo '<form method="post" action="' . View::url('/post/' . $id) . '" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;min-width:280px">';
+            $reportDialogId = 'report-post-dialog-' . $id;
+            echo '<button type="button" class="report-dialog-open" data-report-dialog="' . View::e($reportDialogId) . '">Report post</button>';
+            echo '<dialog class="report-dialog" id="' . View::e($reportDialogId) . '">';
+            echo '<div class="report-dialog-titlebar">';
+            echo '<strong>Report post #' . View::e($id) . '</strong>';
+            echo '<button type="button" class="report-dialog-close" aria-label="Close report window">×</button>';
+            echo '</div>';
+            echo '<form class="report-dialog-form" method="post" action="' . View::url('/post/' . $id) . '">';
             View::csrfField();
             echo '<input type="hidden" name="action" value="report">';
             echo '<label><span>Reason</span><textarea name="reason" rows="3" minlength="3" maxlength="' . MAX_POST_REPORT_LENGTH . '" required></textarea></label>';
-            echo '<button type="submit">Submit report</button>';
-            echo '</form>';
-            echo '</details> ';
+            echo '<div class="report-dialog-actions"><button type="submit">Submit report</button><button type="button" class="report-dialog-cancel">Cancel</button></div>';
+            echo '</form></dialog>';
+            echo '<script>(()=>{';
+            echo 'const dialog=document.getElementById(' . json_encode($reportDialogId) . ');';
+            echo 'const opener=document.querySelector(`[data-report-dialog="${dialog.id}"]`);';
+            echo 'const titlebar=dialog.querySelector(".report-dialog-titlebar");';
+            echo 'const close=()=>dialog.close();';
+            echo 'opener.addEventListener("click",()=>{if(!dialog.open)dialog.showModal();});';
+            echo 'dialog.querySelector(".report-dialog-close").addEventListener("click",close);';
+            echo 'dialog.querySelector(".report-dialog-cancel").addEventListener("click",close);';
+            echo 'let drag=null;';
+            echo 'titlebar.addEventListener("pointerdown",event=>{';
+            echo 'if(event.button!==0||event.target.closest("button"))return;';
+            echo 'const rect=dialog.getBoundingClientRect();';
+            echo 'dialog.style.transform="none";dialog.style.left=rect.left+"px";dialog.style.top=rect.top+"px";';
+            echo 'drag={id:event.pointerId,x:event.clientX-rect.left,y:event.clientY-rect.top};';
+            echo 'titlebar.setPointerCapture(event.pointerId);event.preventDefault();});';
+            echo 'titlebar.addEventListener("pointermove",event=>{if(!drag||event.pointerId!==drag.id)return;';
+            echo 'const maxLeft=Math.max(0,window.innerWidth-dialog.offsetWidth);';
+            echo 'const maxTop=Math.max(0,window.innerHeight-dialog.offsetHeight);';
+            echo 'dialog.style.left=Math.min(maxLeft,Math.max(0,event.clientX-drag.x))+"px";';
+            echo 'dialog.style.top=Math.min(maxTop,Math.max(0,event.clientY-drag.y))+"px";});';
+            echo 'const stop=event=>{if(drag&&event.pointerId===drag.id)drag=null;};';
+            echo 'titlebar.addEventListener("pointerup",stop);titlebar.addEventListener("pointercancel",stop);';
+            echo '})();</script>';
         }
     }
     if ($isOwner || $canModeratePosts) {
