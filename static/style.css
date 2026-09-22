@@ -16,6 +16,7 @@
 
 .user-profile { width: 100%; margin-bottom: 24px; }
 .profile-banner { display: block; width: 100%; aspect-ratio: 4 / 1; object-fit: cover; border-radius: var(--radius-lg); }
+.user-profile .profile-banner { height: clamp(90px, 15vw, 210px); aspect-ratio: auto; }
 .profile-heading { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
 .profile-heading h1 { margin: 0; overflow-wrap: anywhere; position: relative; top: -16px; }
 .profile-avatar { display: block; width: 120px; height: 120px; object-fit: cover; border-radius: 50%; flex-shrink: 0; }
