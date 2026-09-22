@@ -127,9 +127,9 @@ class View
 
 
         if ($siteLogo) {
-            $brand = '<img src="' . $e($siteLogo) . '" alt="' . $e($siteName) . '" style="height:32px;vertical-align:middle">';
+            $brand = '<img class="navbar-brand-image" src="' . $e($siteLogo) . '" alt="' . $e($siteName) . '">';
         } elseif ($siteBanner) {
-            $brand = '<img src="' . $e($siteBanner) . '" alt="' . $e($siteName) . '" style="height:130px;vertical-align:middle">';
+            $brand = '<img class="navbar-brand-image navbar-brand-banner" src="' . $e($siteBanner) . '" alt="' . $e($siteName) . '">';
         } else {
             $brand = $e($siteName);
         }
@@ -225,20 +225,22 @@ HTML;
         }
         echo <<<HTML
 <header>
-  <nav>
-    <a href="{$e(SITE_BASE)}/">{$brand}</a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="navbar-brand" href="{$e(SITE_BASE)}/">{$brand}</a>
 HTML;
         if ($sidebarTags !== null) {
-            echo '    <button class="navbar-hamburger" type="button" onclick="document.getElementById(\'sidebar\').classList.toggle(\'open\')">☰</button>' . "\n";
+            echo '    <button class="navbar-search-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Search</button>' . "\n";
         }
         echo <<<HTML
+    <button class="navbar-menu-toggle" type="button" aria-controls="navbar-links" aria-expanded="false">Menu <span aria-hidden="true">☰</span></button>
+    <div class="navbar-links" id="navbar-links">
     <a href="{$e(SITE_BASE)}/posts">Browse</a>
     <a href="{$e(SITE_BASE)}/upload">Upload</a>
     <a href="{$e(SITE_BASE)}/tags">Tags</a>
 
 HTML;
         if ($user) {
-            echo '    <a style="margin-left: auto;" href="' . $e(SITE_BASE) . '/user/' . $e($user['name']) . '">' . $e($user['name']) . '</a>' . "\n";
+            echo '    <a class="navbar-account-link" href="' . $e(SITE_BASE) . '/user/' . $e($user['name']) . '">' . $e($user['name']) . '</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/favorites">Favorites</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/settings">Settings</a>' . "\n";
             if (Auth::can('access_admin_panel', $user) || Auth::can('manage_post_reports', $user) || Auth::can('manage_database_backups', $user)) {
@@ -249,12 +251,56 @@ HTML;
             }
             echo '    <a href="' . $e(SITE_BASE) . '/logout">Logout</a>' . "\n";
         } else {
-            echo '    <a style="margin-left: auto;" href="' . $e(SITE_BASE) . '/login">Login</a>' . "\n";
+            echo '    <a class="navbar-account-link" href="' . $e(SITE_BASE) . '/login">Login</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/register">Register</a>' . "\n";
         }
         echo <<<HTML
+    </div>
   </nav>
 </header>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const menuButton = document.querySelector('.navbar-menu-toggle');
+  const links = document.getElementById('navbar-links');
+  const searchButton = document.querySelector('.navbar-search-toggle');
+  const sidebar = document.getElementById('sidebar');
+
+  menuButton.addEventListener('click', () => {
+    const open = links.classList.toggle('open');
+    menuButton.setAttribute('aria-expanded', String(open));
+    if (open && searchButton && sidebar) {
+      sidebar.classList.remove('open');
+      searchButton.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  if (searchButton && sidebar) {
+    searchButton.addEventListener('click', () => {
+      const open = sidebar.classList.toggle('open');
+      searchButton.setAttribute('aria-expanded', String(open));
+      if (open) {
+        links.classList.remove('open');
+        menuButton.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.site-nav') && links.classList.contains('open')) {
+      links.classList.remove('open');
+      menuButton.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && links.classList.contains('open')) {
+      links.classList.remove('open');
+      menuButton.setAttribute('aria-expanded', 'false');
+      menuButton.focus();
+    }
+  });
+});
+</script>
 <div id="container">
 HTML;
         if ($sidebarTags !== null) {
