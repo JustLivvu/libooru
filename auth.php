@@ -6,6 +6,8 @@ require_once __DIR__ . '/activity.php';
 
 class Auth
 {
+    private const SESSION_LIFETIME = 30 * 24 * 60 * 60;
+
     private static ?array $user = null;
     private static array $permissionCache = [];
 
@@ -18,8 +20,9 @@ class Auth
             }
             session_save_path($sessionDir);
             session_name('libooru_session');
+            ini_set('session.gc_maxlifetime', (string)self::SESSION_LIFETIME);
             session_set_cookie_params([
-                'lifetime' => 86400 * 30,
+                'lifetime' => self::SESSION_LIFETIME,
                 'path' => '/',
                 'httponly' => true,
                 'samesite' => 'Lax',
