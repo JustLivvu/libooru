@@ -362,6 +362,12 @@ header nav {
   color: var(--text-main);
 }
 
+.site-subnav .navbar-current,
+.site-subnav .navbar-current:hover {
+  background: #18181b;
+  color: #f4f4f5;
+}
+
 .site-subnav a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

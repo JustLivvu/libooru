@@ -108,6 +108,7 @@ class View
         $uploadLinkClass = $relativePath === '/upload' ? ' class="navbar-current" aria-current="page"' : '';
         $tagsLinkClass = $relativePath === '/tags' ? ' class="navbar-current" aria-current="page"' : '';
         $commentsLinkClass = $relativePath === '/comments' ? ' class="navbar-current" aria-current="page"' : '';
+        $favoritesLinkClass = $relativePath === '/favorites' ? ' class="navbar-current" aria-current="page"' : '';
         $sidebarToggleLabel = $showSiteHeader ? 'Filters' : 'Search';
         $isPublicPage = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && http_response_code() < 400
             && (bool)preg_match('#^/(?:$|posts$|comments$|tags$|terms$|search-help$|post/\d+$)#', $relativePath);
@@ -252,7 +253,6 @@ HTML;
 HTML;
         if ($user) {
             echo '    <a class="navbar-account-link" href="' . $e(SITE_BASE) . '/user/' . $e($user['name']) . '">' . $e($user['name']) . '</a>' . "\n";
-            echo '    <a href="' . $e(SITE_BASE) . '/favorites">Favorites</a>' . "\n";
             echo '    <a href="' . $e(SITE_BASE) . '/settings">Settings</a>' . "\n";
             if (Auth::can('access_admin_panel', $user) || Auth::can('manage_post_reports', $user) || Auth::can('manage_database_backups', $user)) {
                 echo '    <a href="' . $e(SITE_BASE) . '/admin">Panel</a>' . "\n";
@@ -274,6 +274,7 @@ HTML;
   <div class="site-subnav" role="navigation" aria-label="Quick links">
     <a href="{$e(SITE_BASE)}/posts">Listing</a>
     <a href="{$e(SITE_BASE)}/posts?order=score%20DESC">Top</a>
+    <a{$favoritesLinkClass} href="{$e(SITE_BASE)}/favorites">Favorites</a>
     <a href="{$e(SITE_BASE)}/search-help">Help</a>
   </div>
 HTML;
