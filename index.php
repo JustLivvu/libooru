@@ -1195,7 +1195,6 @@ function page_user_favorites(?array $user, string $targetName): void
 
     View::header($target['name'] . ' Favorites', $user, $sidebarTags);
     View::flash();
-    echo '<p>' . $result['total'] . ' favorite posts</p>';
     echo '<section class="post-listing" aria-label="Favorite posts">';
     View::postGrid($result['posts']);
     View::paginator($page, $result['pages'], $favoritesPath);
@@ -1212,7 +1211,6 @@ function page_favorites(?array $user): void
     $sidebarTags = DB::rows('SELECT name, count, category FROM tags ORDER BY count DESC LIMIT 50');
     View::header('Favorites', $user, $sidebarTags);
     View::flash();
-    echo '<p>' . $result['total'] . ' favorite posts</p>';
     if ($result['total'] > 0) {
         echo '<p><a href="' . View::url('/favorites/lucky') . '" class="button">Lucky draw</a></p>';
     }
