@@ -30,6 +30,20 @@
 .profile-settings button { align-self: flex-start; }
 .profile-help { color: var(--text-muted); margin: 0; }
 
+.api-key-display {
+  display: flex;
+  width: min(100%, 520px);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.api-key-display input {
+  min-width: 0;
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0.03em;
+}
+
 .theme-settings {
   width: min(100%, 420px);
   margin-bottom: 28px;

@@ -2776,7 +2776,6 @@ function page_settings(?array $user, string $method): void
     Auth::require();
 
     $error = '';
-    $apiKey = null;
     $biography = $user['biography'] ?? '';
     $displayName = $user['display_name'] ?? '';
 
@@ -2842,8 +2841,8 @@ function page_settings(?array $user, string $method): void
         } elseif ($action === 'regen_api') {
             $key = bin2hex(random_bytes(16));
             DB::exec('UPDATE users SET api_key = ? WHERE id = ?', [$key, (int)$user['id']]);
-            $apiKey = $key;
-            View::setFlash('API key regenerated. Copy it now — it will not be shown again.', 'ok');
+            View::setFlash('API key regenerated.', 'ok');
+            Router::redirect('/settings');
 
         } elseif ($action === 'delete_api') {
             DB::exec('UPDATE users SET api_key = ? WHERE id = ?', ['', (int)$user['id']]);
@@ -2937,15 +2936,14 @@ function page_settings(?array $user, string $method): void
 
     echo '<h2 style="margin-top:30px">API Key</h2>';
 
-    if ($apiKey !== null) {
-
-        echo '<p class="flash flash-ok" style="font-family:monospace;word-break:break-all">' . View::e($apiKey) . '</p>';
-        echo '<p style="color:var(--muted-text);font-size:12px">This is the only time this key will be shown. Copy it now.</p>';
-    }
-
-    if ($hasKey && $apiKey === null) {
-        echo '<p>You have an active API key. <strong>The key value is not shown for security.</strong></p>';
-    } elseif (!$hasKey) {
+    if ($hasKey) {
+        echo '<div class="api-key-display">';
+        echo '<input id="user-api-key" type="text" readonly value="' . View::e($user['api_key']) . '" autocomplete="off" spellcheck="false" aria-label="Your API key">';
+        echo '<button type="button" id="copy-api-key">Copy</button>';
+        echo '</div>';
+        echo '<p class="profile-help">Keep this key private. Anyone with it can authenticate as your account through the API.</p>';
+        echo '<script>(()=>{const input=document.getElementById("user-api-key");const button=document.getElementById("copy-api-key");if(!input||!button)return;button.addEventListener("click",async()=>{let copied=false;try{await navigator.clipboard.writeText(input.value);copied=true;}catch(e){input.select();copied=document.execCommand("copy");}if(copied){button.textContent="Copied";setTimeout(()=>button.textContent="Copy",1600);}});})();</script>';
+    } else {
         echo '<p>You do not have an API key.</p>';
     }
 
