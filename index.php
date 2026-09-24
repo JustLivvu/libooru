@@ -330,6 +330,10 @@ function dispatch(string $method, string $path): void
         page_search_help($user);
     }
 
+    elseif ($path === '/api-docs') {
+        page_api_docs($user);
+    }
+
     elseif (preg_match('#^/user/([^/]+)/favorites$#', $path, $m)) {
         page_user_favorites($user, rawurldecode($m[1]));
     }
@@ -1358,6 +1362,73 @@ function page_search_help(?array $user): void
     View::footer();
 }
 
+function page_api_docs(?array $user): void
+{
+    $apiEnabled = View::siteSetting('api_enabled', '1') === '1';
+    $rateLimit = min(100000, max(1, (int)View::siteSetting('api_rate_limit', '120')));
+    $baseUrl = View::absoluteUrl(View::url('/api/v1'));
+    $readAccess = View::siteSetting('require_login_posts', '0') === '1' ? 'API key' : 'Public';
+    $endpoints = [
+        ['GET', '/posts', $readAccess, 'List and search posts. Parameters: page, limit (1–100), tags, rating, quality.'],
+        ['GET', '/posts/{id}', $readAccess, 'Get one post together with its tags and comments.'],
+        ['POST', '/posts', 'API key', 'Upload a post using multipart/form-data.'],
+        ['PUT', '/posts/{id}', 'Owner or moderator', 'Update tags, rating, source, and title using JSON.'],
+        ['DELETE', '/posts/{id}', 'Owner or moderator', 'Delete a post and its stored media.'],
+        ['GET', '/tags', $readAccess, 'List tags. Parameters: page, limit (1–200), q.'],
+        ['GET', '/tags/autocomplete', $readAccess, 'Autocomplete tags. Parameters: q and limit (1–10).'],
+        ['GET', '/tags/explanation', $readAccess, 'Explain a tag. Required parameter: tag.'],
+        ['GET', '/comments/{postId}', $readAccess, 'List comments belonging to a post.'],
+        ['POST', '/comments/{postId}', 'API key', 'Add a comment using a JSON body with the body field.'],
+        ['DELETE', '/comments/{commentId}', 'Moderator', 'Delete a comment.'],
+        ['POST', '/votes/{postId}', 'API key', 'Vote using JSON value 1, -1, or 0 to remove the vote.'],
+        ['GET', '/users/me', 'API key', 'Return information about the authenticated account.'],
+    ];
+
+    View::header('API Documentation', $user, null, [
+        'description' => 'API endpoints, authentication, rate limits, and request examples for ' . View::siteSetting('site_name', SITE_NAME) . '.',
+        'canonical' => View::url('/api-docs'),
+        'image' => false,
+    ]);
+
+    echo '<article class="api-docs">';
+    echo '<div class="api-docs-intro"><div><h1>API Documentation</h1><p>Use the JSON API to browse content and perform authenticated account actions.</p></div>';
+    echo '<span class="api-status ' . ($apiEnabled ? 'is-enabled' : 'is-disabled') . '">' . ($apiEnabled ? 'API enabled' : 'API disabled') . '</span></div>';
+
+    echo '<section><h2>Connection</h2><dl class="api-facts">';
+    echo '<div><dt>Base URL</dt><dd><code>' . View::e($baseUrl) . '</code></dd></div>';
+    echo '<div><dt>Format</dt><dd><code>application/json</code></dd></div>';
+    echo '<div><dt>Rate limit</dt><dd>' . $rateLimit . ' requests per minute for each authenticated user or IP address</dd></div>';
+    echo '</dl></section>';
+
+    echo '<section><h2>Authentication</h2>';
+    echo '<p>Send your key in the <code>X-API-Key</code> request header. You can view or regenerate the key in <a href="' . View::url('/settings') . '">user settings</a>.</p>';
+    echo '<pre><code>curl -H "X-API-Key: YOUR_API_KEY" \\&#10;  "' . View::e($baseUrl) . '/users/me"</code></pre>';
+    echo '<p>Public read endpoints do not require a key unless the administrator requires login to view posts.</p>';
+    echo '</section>';
+
+    echo '<section><h2>Endpoints</h2><div class="api-endpoint-table"><table><thead><tr><th>Method</th><th>Path</th><th>Access</th><th>Description</th></tr></thead><tbody>';
+    foreach ($endpoints as [$endpointMethod, $endpointPath, $endpointAccess, $endpointDescription]) {
+        echo '<tr><td><span class="api-method api-method-' . strtolower($endpointMethod) . '">' . $endpointMethod . '</span></td>';
+        echo '<td><code>' . View::e($endpointPath) . '</code></td><td>' . View::e($endpointAccess) . '</td><td>' . View::e($endpointDescription) . '</td></tr>';
+    }
+    echo '</tbody></table></div></section>';
+
+    echo '<section><h2>Examples</h2>';
+    echo '<h3>Search posts</h3><pre><code>curl "' . View::e($baseUrl) . '/posts?tags=wolf&amp;rating=s&amp;page=1&amp;limit=25"</code></pre>';
+    echo '<h3>Upload a post</h3><pre><code>curl -X POST \\&#10;  -H "X-API-Key: YOUR_API_KEY" \\&#10;  -F "file=@image.png" \\&#10;  -F "tags=wolf solo blue_eyes" \\&#10;  -F "rating=s" \\&#10;  -F "source=https://example.com/source" \\&#10;  "' . View::e($baseUrl) . '/posts"</code></pre>';
+    echo '<h3>Update a post</h3><pre><code>curl -X PUT \\&#10;  -H "X-API-Key: YOUR_API_KEY" \\&#10;  -H "Content-Type: application/json" \\&#10;  -d \'{"tags":"wolf solo","rating":"q","source":"https://example.com","title":"Example"}\' \\&#10;  "' . View::e($baseUrl) . '/posts/123"</code></pre>';
+    echo '<h3>Add a comment</h3><pre><code>curl -X POST \\&#10;  -H "X-API-Key: YOUR_API_KEY" \\&#10;  -H "Content-Type: application/json" \\&#10;  -d \'{"body":"Nice post"}\' \\&#10;  "' . View::e($baseUrl) . '/comments/123"</code></pre>';
+    echo '</section>';
+
+    echo '<section><h2>Responses and errors</h2>';
+    echo '<p>Successful requests return JSON. Uploads and new comments return HTTP <code>201</code>. Deletions and updates return <code>{"ok":true}</code>.</p>';
+    echo '<pre><code>{"error":"Description of the error"}</code></pre>';
+    echo '<div class="api-error-codes"><span><code>400</code> Invalid request</span><span><code>401</code> Missing or invalid authentication</span><span><code>403</code> Insufficient permission</span><span><code>404</code> Resource not found</span><span><code>429</code> Rate limit exceeded</span><span><code>503</code> API disabled</span></div>';
+    echo '</section>';
+    echo '</article>';
+    View::footer();
+}
+
 function page_user(?array $user, string $targetName): void
 {
     if (!$user && View::siteSetting('require_login_posts', '0') === '1') {
@@ -2065,6 +2136,13 @@ function page_admin(?array $user, string $method): void
                 View::setFlash('Custom theme name cannot exceed 40 characters.', 'error');
                 Router::redirect('/admin', ['open' => 'site-settings']);
             }
+            $apiRateLimitInput = trim((string)($_POST['api_rate_limit'] ?? ''));
+            if (!ctype_digit($apiRateLimitInput) || (int)$apiRateLimitInput < 1 || (int)$apiRateLimitInput > 100000) {
+                View::setFlash('API rate limit must be between 1 and 100,000 requests per minute.', 'error');
+                Router::redirect('/admin', ['open' => 'site-settings']);
+            }
+            $apiEnabled = isset($_POST['api_enabled']) ? '1' : '0';
+            $apiRateLimit = (string)(int)$apiRateLimitInput;
             $availableThemes = ['dark', 'light', 'catppuccin', 'blue'];
             if (trim($customThemeCss) !== '') $availableThemes[] = 'custom';
             $defaultTheme = (string)($_POST['default_theme'] ?? 'dark');
@@ -2079,6 +2157,8 @@ function page_admin(?array $user, string $method): void
             View::setSiteSetting('default_theme', $defaultTheme);
             View::setSiteSetting('custom_theme_name', $customThemeName);
             View::setSiteSetting('custom_theme_css', $customThemeCss);
+            View::setSiteSetting('api_enabled', $apiEnabled);
+            View::setSiteSetting('api_rate_limit', $apiRateLimit);
             foreach (['site_logo_upload' => 'site_logo', 'site_banner_upload' => 'site_banner', 'home_header_upload' => 'home_header_image'] as $field => $setting) {
                 $oldImage = View::siteSetting($setting);
                 if (isset($_POST['clear_' . $setting])) {
@@ -2250,6 +2330,8 @@ function page_admin(?array $user, string $method): void
     $curDefaultTheme     = View::siteSetting('default_theme', 'dark');
     $curCustomThemeName  = View::siteSetting('custom_theme_name', 'Custom');
     $curCustomThemeCss   = View::siteSetting('custom_theme_css', '');
+    $curApiEnabled       = View::siteSetting('api_enabled', '1') === '1';
+    $curApiRateLimit     = min(100000, max(1, (int)View::siteSetting('api_rate_limit', '120')));
     $customThemeConfigured = trim($curCustomThemeCss) !== '';
     $adminThemeOptions   = [
         'dark' => 'Dark',
@@ -2378,6 +2460,12 @@ function page_admin(?array $user, string $method): void
 CSS;
     echo '<details class="custom-theme-example"><summary>Example custom theme CSS</summary><pre><code>' . View::e($customThemeExample) . '</code></pre></details>';
     echo '<script>(()=>{const css=document.getElementById("custom-theme-css-input");const option=document.querySelector("#default-theme-select option[value=custom]");if(!css||!option)return;const sync=()=>option.disabled=!css.value.trim();css.addEventListener("input",sync);sync();})();</script>';
+    echo '</fieldset>';
+    echo '<fieldset class="api-settings-editor">';
+    echo '<legend>API</legend>';
+    echo '<label class="api-enabled-setting"><input type="checkbox" name="api_enabled" value="1"' . ($curApiEnabled ? ' checked' : '') . '> <span>Enable API</span></label>';
+    echo '<label><span>Rate limit <small>(requests per minute for each user or IP address)</small></span><input type="number" name="api_rate_limit" min="1" max="100000" step="1" required value="' . $curApiRateLimit . '"></label>';
+    echo '<a href="' . View::url('/api-docs') . '">Open API documentation</a>';
     echo '</fieldset>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Navbar logo <small>(saved locally)</small></span><input type="file" name="site_logo_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
     if ($curLogo) echo '<label><input type="checkbox" name="clear_site_logo"> Remove current navbar logo</label>';
@@ -2934,7 +3022,7 @@ function page_settings(?array $user, string $method): void
     echo '</form>';
 
 
-    echo '<h2 style="margin-top:30px">API Key</h2>';
+    echo '<div class="settings-section-heading"><h2>API Key</h2><a href="' . View::url('/api-docs') . '">API documentation</a></div>';
 
     if ($hasKey) {
         echo '<div class="api-key-display">';

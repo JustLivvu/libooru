@@ -114,7 +114,7 @@ class View
         $favoritesLinkClass = $relativePath === '/favorites' ? ' class="navbar-current" aria-current="page"' : '';
         $sidebarToggleLabel = $showSiteHeader ? 'Filters' : 'Search';
         $isPublicPage = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && http_response_code() < 400
-            && (bool)preg_match('#^/(?:$|posts$|comments$|tags$|discord$|wiki(?:/[a-z0-9-]+)?$|terms$|search-help$|post/\d+$)#', $relativePath);
+            && (bool)preg_match('#^/(?:$|posts$|comments$|tags$|discord$|wiki(?:/[a-z0-9-]+)?$|terms$|search-help$|api-docs$|post/\d+$)#', $relativePath);
         $robots = (string)($meta['robots'] ?? ($isPublicPage ? 'index,follow,max-image-preview:large' : 'noindex,follow'));
         $image = array_key_exists('image', $meta)
             ? (string)$meta['image']

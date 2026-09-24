@@ -41,9 +41,16 @@ class Api
         header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
         header('Access-Control-Allow-Headers: Content-Type, X-API-Key');
 
+        if (View::siteSetting('api_enabled', '1') !== '1') {
+            http_response_code(503);
+            header('Cache-Control: no-store');
+            echo json_encode(['error' => 'API is disabled by the administrator.']);
+            return;
+        }
+
         if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
             http_response_code(204);
-            exit;
+            return;
         }
 
 
@@ -57,6 +64,19 @@ class Api
         } elseif (Auth::current()) {
 
             $this->authUser = Auth::current();
+        }
+
+        $rateLimit = min(100000, max(1, (int)View::siteSetting('api_rate_limit', '120')));
+        $rateLimitSubject = $this->authUser
+            ? 'user:' . (int)$this->authUser['id']
+            : 'ip:' . Auth::requestSubject();
+        header('X-RateLimit-Limit: ' . $rateLimit);
+        header('X-RateLimit-Window: 60');
+        if (!DB::consumeRateLimit('api_request', $rateLimitSubject, $rateLimit, 60)) {
+            http_response_code(429);
+            header('Retry-After: 60');
+            echo json_encode(['error' => 'API rate limit exceeded. Please try again later.']);
+            return;
         }
 
         $uri    = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
