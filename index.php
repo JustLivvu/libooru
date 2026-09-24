@@ -2054,6 +2054,21 @@ function page_admin(?array $user, string $method): void
                 View::setFlash('Discord URL must be a valid HTTP or HTTPS address.', 'error');
                 Router::redirect('/admin', ['open' => 'site-settings']);
             }
+            $customThemeCss = (string)($_POST['custom_theme_css'] ?? '');
+            if (strlen($customThemeCss) > 100000) {
+                View::setFlash('Custom theme CSS cannot exceed 100 KB.', 'error');
+                Router::redirect('/admin', ['open' => 'site-settings']);
+            }
+            $customThemeName = trim((string)($_POST['custom_theme_name'] ?? ''));
+            if ($customThemeName === '') $customThemeName = 'Custom';
+            if (strlen($customThemeName) > 40) {
+                View::setFlash('Custom theme name cannot exceed 40 characters.', 'error');
+                Router::redirect('/admin', ['open' => 'site-settings']);
+            }
+            $availableThemes = ['dark', 'light', 'catppuccin', 'blue'];
+            if (trim($customThemeCss) !== '') $availableThemes[] = 'custom';
+            $defaultTheme = (string)($_POST['default_theme'] ?? 'dark');
+            if (!in_array($defaultTheme, $availableThemes, true)) $defaultTheme = 'dark';
             $name    = trim($_POST['site_name'] ?? '');
             $description = trim($_POST['site_description'] ?? '');
             $default = trim($_POST['default_blacklist'] ?? '');
@@ -2061,6 +2076,9 @@ function page_admin(?array $user, string $method): void
             if ($name !== '') View::setSiteSetting('site_name', $name);
             View::setSiteSetting('site_description', $description);
             View::setSiteSetting('discord_url', $discordUrl);
+            View::setSiteSetting('default_theme', $defaultTheme);
+            View::setSiteSetting('custom_theme_name', $customThemeName);
+            View::setSiteSetting('custom_theme_css', $customThemeCss);
             foreach (['site_logo_upload' => 'site_logo', 'site_banner_upload' => 'site_banner', 'home_header_upload' => 'home_header_image'] as $field => $setting) {
                 $oldImage = View::siteSetting($setting);
                 if (isset($_POST['clear_' . $setting])) {
@@ -2229,6 +2247,20 @@ function page_admin(?array $user, string $method): void
     $curBanner           = View::siteSetting('site_banner');
     $curHomeHeaderImage  = View::siteSetting('home_header_image');
     $curDefaultBlacklist = View::siteSetting('default_blacklist', '');
+    $curDefaultTheme     = View::siteSetting('default_theme', 'dark');
+    $curCustomThemeName  = View::siteSetting('custom_theme_name', 'Custom');
+    $curCustomThemeCss   = View::siteSetting('custom_theme_css', '');
+    $customThemeConfigured = trim($curCustomThemeCss) !== '';
+    $adminThemeOptions   = [
+        'dark' => 'Dark',
+        'light' => 'Light',
+        'catppuccin' => 'Catppuccin Mocha',
+        'blue' => 'Blue',
+        'custom' => $curCustomThemeName ?: 'Custom',
+    ];
+    if (!isset($adminThemeOptions[$curDefaultTheme]) || ($curDefaultTheme === 'custom' && !$customThemeConfigured)) {
+        $curDefaultTheme = 'dark';
+    }
     $curGlobalTagBlacklist = View::siteSetting('global_tag_blacklist', '');
     $globallyBlockedPostCount = count(Post::globallyBlockedPostIds());
     $curTermsOfService   = View::siteSetting('terms_of_service', '');
@@ -2307,6 +2339,46 @@ function page_admin(?array $user, string $method): void
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Site name</span><input name="site_name" value="' . View::e($curName) . '" style="width:100%"></label>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Discord URL <small>(leave empty to hide the homepage link)</small></span><input type="url" name="discord_url" value="' . View::e($curDiscordUrl) . '" maxlength="2048" placeholder="https://discord.gg/your-invite" style="width:100%"></label>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>SEO description <small>(used by search engines and Discord)</small></span><textarea name="site_description" rows="3" maxlength="200" style="width:100%" placeholder="Describe the site in one concise sentence…">' . View::e($curDescription) . '</textarea></label>';
+    echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Default theme <small>(used when a visitor has no local preference)</small></span><select id="default-theme-select" name="default_theme" style="width:100%">';
+    foreach ($adminThemeOptions as $themeValue => $themeLabel) {
+        $disabled = $themeValue === 'custom' && !$customThemeConfigured ? ' disabled' : '';
+        echo '<option value="' . View::e($themeValue) . '"' . ($curDefaultTheme === $themeValue ? ' selected' : '') . $disabled . '>' . View::e($themeLabel) . '</option>';
+    }
+    echo '</select></label>';
+    echo '<fieldset class="custom-theme-editor">';
+    echo '<legend>Custom theme</legend>';
+    echo '<label><span>Theme name</span><input name="custom_theme_name" maxlength="40" value="' . View::e($curCustomThemeName) . '" placeholder="Custom"></label>';
+    echo '<label><span>Custom CSS <small>(clear this field to disable the custom theme)</small></span><textarea id="custom-theme-css-input" name="custom_theme_css" rows="18" maxlength="100000" spellcheck="false" placeholder=":root[data-theme=&quot;custom&quot;] {&#10;  --bg-main: #10131a;&#10;  --accent: #8ab4f8;&#10;}">' . View::e($curCustomThemeCss) . '</textarea></label>';
+    $customThemeExample = <<<'CSS'
+:root[data-theme="custom"] {
+  color-scheme: dark;
+  --bg-main: #10131a;
+  --bg-card: #181d27;
+  --bg-sidebar: #141821;
+  --bg-elevated: #242b38;
+  --bg-input: #181d27;
+  --text-main: #eef2ff;
+  --text-muted: #b3bdd1;
+  --text-dim: #7d899f;
+  --border-color: #2d3545;
+  --border-hover: #46526a;
+  --accent: #8ab4f8;
+  --accent-hover: #b7d1ff;
+  --accent-bg: #263752;
+  --nav-current-bg: #263752;
+  --nav-current-text: #ffffff;
+  --tag-general: #66c2ff;
+  --tag-artist: #ffd166;
+  --tag-copyright: #c69cff;
+  --tag-character: #ff8fa3;
+  --tag-species: #74d99f;
+  --tag-lore: #67d5ca;
+  --tag-meta: #8ab4f8;
+}
+CSS;
+    echo '<details class="custom-theme-example"><summary>Example custom theme CSS</summary><pre><code>' . View::e($customThemeExample) . '</code></pre></details>';
+    echo '<script>(()=>{const css=document.getElementById("custom-theme-css-input");const option=document.querySelector("#default-theme-select option[value=custom]");if(!css||!option)return;const sync=()=>option.disabled=!css.value.trim();css.addEventListener("input",sync);sync();})();</script>';
+    echo '</fieldset>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Navbar logo <small>(saved locally)</small></span><input type="file" name="site_logo_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
     if ($curLogo) echo '<label><input type="checkbox" name="clear_site_logo"> Remove current navbar logo</label>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Navbar banner <small>(saved locally; used when no logo is set)</small></span><input type="file" name="site_banner_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
@@ -2794,19 +2866,32 @@ function page_settings(?array $user, string $method): void
     View::flash();
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
 
+    $themeOptions = [
+        'dark' => 'Dark',
+        'light' => 'Light',
+        'catppuccin' => 'Catppuccin Mocha',
+        'blue' => 'Blue',
+    ];
+    $siteDefaultTheme = View::siteSetting('default_theme', 'dark');
+    $customThemeCss = View::siteSetting('custom_theme_css', '');
+    if (trim($customThemeCss) !== '') {
+        $themeOptions['custom'] = View::siteSetting('custom_theme_name', 'Custom') ?: 'Custom';
+    }
+    if (!isset($themeOptions[$siteDefaultTheme])) $siteDefaultTheme = 'dark';
+
     echo '<section class="theme-settings">';
     echo '<h2>Appearance</h2>';
     echo '<label for="theme-select">Theme</label>';
     echo '<select id="theme-select">';
-    echo '<option value="dark">Dark</option>';
-    echo '<option value="light">Light</option>';
-    echo '<option value="catppuccin">Catppuccin Mocha</option>';
-    echo '<option value="blue">Blue</option>';
+    echo '<option value="site">Site default (' . View::e($themeOptions[$siteDefaultTheme]) . ')</option>';
+    foreach ($themeOptions as $themeValue => $themeLabel) {
+        echo '<option value="' . View::e($themeValue) . '">' . View::e($themeLabel) . '</option>';
+    }
     echo '</select>';
-    echo '<p>The selected theme is saved locally in this browser.</p>';
+    echo '<p>The selected theme is saved locally in this browser. Site default follows changes made by the administrator.</p>';
     echo '</section>';
     echo '<script>(()=>{const select=document.getElementById("theme-select");if(!select)return;';
-    echo 'const theme=window.libooruTheme;select.value=theme?.get()||document.documentElement.dataset.theme||"dark";';
+    echo 'const theme=window.libooruTheme;select.value=theme?.getPreference?.()||"site";';
     echo 'select.addEventListener("change",()=>theme?.set(select.value));})();</script>';
 
     echo '<h2>Profile</h2>';

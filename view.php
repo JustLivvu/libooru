@@ -121,7 +121,27 @@ class View
             : (string)($siteBanner ?: $siteLogo ?: self::url('/static/favicon.png'));
         if ($image !== '') $image = self::absoluteUrl($image);
         $imageAlt = (string)($meta['image_alt'] ?? $fullTitle);
-        $themeColor = (string)($meta['theme_color'] ?? '#000000');
+        $themeBackgrounds = [
+            'dark' => '#09090b',
+            'light' => '#fafafa',
+            'catppuccin' => '#1e1e2e',
+            'blue' => '#07111f',
+            'custom' => '#09090b',
+        ];
+        $customThemeCss = self::siteSetting('custom_theme_css', '');
+        $customThemeEnabled = trim($customThemeCss) !== '';
+        $themes = ['dark', 'light', 'catppuccin', 'blue'];
+        if ($customThemeEnabled) $themes[] = 'custom';
+        $defaultTheme = self::siteSetting('default_theme', 'dark');
+        if (!in_array($defaultTheme, $themes, true)) $defaultTheme = 'dark';
+        $themesJson = json_encode($themes, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP);
+        $defaultThemeJson = json_encode($defaultTheme, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP);
+        $customThemeStyle = '';
+        if ($customThemeEnabled) {
+            $safeCustomCss = str_ireplace('</style', '<\\/style', $customThemeCss);
+            $customThemeStyle = '<style id="custom-theme-css">' . $safeCustomCss . '</style>' . "\n";
+        }
+        $themeColor = (string)($meta['theme_color'] ?? $themeBackgrounds[$defaultTheme]);
 
         $jsonLd = $meta['json_ld'] ?? [
             '@context' => 'https://schema.org',
@@ -166,7 +186,7 @@ class View
 
         echo <<<HTML
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="{$e($defaultTheme)}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -177,34 +197,51 @@ class View
 <meta name="theme-color" content="{$e($themeColor)}">
 <script>
 (() => {
-  const themes = ['dark', 'light', 'catppuccin', 'blue'];
-  const colors = { dark: '#09090b', light: '#fafafa', catppuccin: '#1e1e2e', blue: '#07111f' };
+  const themes = {$themesJson};
+  const defaultTheme = {$defaultThemeJson};
   const cookieTheme = () => {
     const match = document.cookie.match(/(?:^|; )libooru_theme=([^;]*)/);
     if (!match) return '';
     try { return decodeURIComponent(match[1]); } catch (_) { return ''; }
   };
-  let theme = '';
-  try { theme = localStorage.getItem('libooru-theme') || ''; } catch (_) {}
-  if (!themes.includes(theme)) theme = cookieTheme();
-  if (!themes.includes(theme)) theme = 'dark';
+  let preference = '';
+  try { preference = localStorage.getItem('libooru-theme') || ''; } catch (_) {}
+  if (preference !== 'site' && !themes.includes(preference)) preference = cookieTheme();
+  if (preference !== 'site' && !themes.includes(preference)) preference = 'site';
 
-  const apply = (nextTheme, persist = true) => {
-    if (!themes.includes(nextTheme)) nextTheme = 'dark';
-    document.documentElement.dataset.theme = nextTheme;
+  const updateThemeColor = () => {
+    const color = getComputedStyle(document.documentElement).getPropertyValue('--bg-main').trim();
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.content = colors[nextTheme];
+    if (meta && color) meta.content = color;
+  };
+
+  const apply = (nextPreference, persist = true) => {
+    if (nextPreference !== 'site' && !themes.includes(nextPreference)) nextPreference = 'site';
+    preference = nextPreference;
+    const nextTheme = preference === 'site' ? defaultTheme : preference;
+    document.documentElement.dataset.theme = nextTheme;
     if (persist) {
-      try { localStorage.setItem('libooru-theme', nextTheme); } catch (_) {}
-      document.cookie = 'libooru_theme=' + encodeURIComponent(nextTheme)
+      try { localStorage.setItem('libooru-theme', preference); } catch (_) {}
+      document.cookie = 'libooru_theme=' + encodeURIComponent(preference)
         + '; Max-Age=31536000; Path=/; SameSite=Lax'
         + (location.protocol === 'https:' ? '; Secure' : '');
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', updateThemeColor, { once: true });
+    } else {
+      requestAnimationFrame(updateThemeColor);
     }
     return nextTheme;
   };
 
-  apply(theme, false);
-  window.libooruTheme = { themes, get: () => document.documentElement.dataset.theme || 'dark', set: apply };
+  apply(preference, false);
+  window.libooruTheme = {
+    themes,
+    defaultTheme,
+    get: () => document.documentElement.dataset.theme || defaultTheme,
+    getPreference: () => preference,
+    set: apply
+  };
 })();
 </script>
 <link rel="canonical" href="{$e($canonical)}">
@@ -220,7 +257,7 @@ class View
 <meta name="twitter:description" content="{$e($description)}">
 <script type="application/ld+json">{$jsonLdJson}</script>
 {$mediaPreconnect}<link rel="stylesheet" href="{$e(SITE_BASE)}/static/style.css?v={$styleVersion}">
-<script src="{$e(SITE_BASE)}/static/autocomplete.js?v={$autocompleteVersion}" defer></script>
+{$customThemeStyle}<script src="{$e(SITE_BASE)}/static/autocomplete.js?v={$autocompleteVersion}" defer></script>
 <script src="{$e(SITE_BASE)}/static/tag-explanations.js?v={$tagExplanationsVersion}" defer></script>
 </head>
 <body>

@@ -57,6 +57,58 @@
   font-size: 12px;
 }
 
+.custom-theme-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 2px 0 0;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.custom-theme-editor legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+.custom-theme-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.custom-theme-editor input,
+.custom-theme-editor textarea {
+  width: 100%;
+}
+
+.custom-theme-editor textarea,
+.custom-theme-example code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.custom-theme-editor textarea {
+  min-height: 300px;
+  resize: vertical;
+  tab-size: 2;
+}
+
+.custom-theme-example summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.custom-theme-example pre {
+  overflow-x: auto;
+  margin: 10px 0 0;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-size: 12px;
+}
+
 :root {
   color-scheme: dark;
   --page-right-margin: 20px;
