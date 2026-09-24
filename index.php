@@ -9,6 +9,7 @@ require_once __DIR__ . '/storage.php';
 require_once __DIR__ . '/image.php';
 require_once __DIR__ . '/post.php';
 require_once __DIR__ . '/view.php';
+require_once __DIR__ . '/markdown.php';
 require_once __DIR__ . '/seo.php';
 require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/api.php';
@@ -1132,7 +1133,7 @@ function page_wiki_article(?array $user, string $slug): void
     }
     echo '</div>';
     if ($page['summary'] !== '') echo '<p class="wiki-summary">' . View::e($page['summary']) . '</p>';
-    echo '<div class="wiki-body">' . nl2br(View::e($page['body'])) . '</div>';
+    echo '<div class="wiki-body markdown-body">' . WikiMarkdown::render((string)$page['body']) . '</div>';
     echo '<p class="wiki-meta">Updated ' . View::e(date('Y-m-d H:i', (int)$page['updated_at']));
     if (!empty($page['author_name'])) echo ' by ' . View::e($page['author_name']);
     echo '</p></article>';
@@ -1212,7 +1213,7 @@ function page_wiki_edit(?array $user, ?string $slug, string $method): void
     echo '<label><span>Title</span><input type="text" name="title" maxlength="160" value="' . View::e($title) . '" required autofocus></label>';
     echo '<label><span>URL</span><div class="wiki-slug-field"><span>' . View::e(View::url('/wiki/')) . '</span><input type="text" name="slug" maxlength="120" pattern="[a-z0-9-]+" value="' . View::e($pageSlug) . '" placeholder="generated-from-title"></div></label>';
     echo '<label><span>Summary</span><textarea name="summary" rows="3" maxlength="300" placeholder="Short description shown on the wiki list">' . View::e($summary) . '</textarea></label>';
-    echo '<label><span>Content</span><textarea name="body" rows="20" maxlength="100000" required>' . View::e($body) . '</textarea></label>';
+    echo '<label><span>Content <small>GitHub Flavored Markdown and safe HTML such as &lt;a&gt; are supported.</small></span><textarea name="body" rows="20" maxlength="100000" required>' . View::e($body) . '</textarea></label>';
     echo '<div class="wiki-editor-actions"><button type="submit">' . ($page ? 'Save changes' : 'Publish article') . '</button><a href="' . View::url($page ? '/wiki/' . $page['slug'] : '/wiki') . '">Cancel</a></div>';
     echo '</form>';
     View::footer();

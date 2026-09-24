@@ -2,7 +2,7 @@
 
 Libooru is a self-hosted image and video board written in PHP with SQLite. It provides tag-based discovery, user accounts, moderation, an HTTP API, local or S3-compatible media storage, and importers for Realbooru, e621, and Rule34.xxx.
 
-The application has no framework, package manager, build step, or external database server. Database migrations run automatically when the application opens the SQLite database.
+The application has no framework, frontend build step, or external database server. Composer installs the Markdown parser used by Wiki articles. Database migrations run automatically when the application opens the SQLite database.
 
 ## Features
 
@@ -13,6 +13,7 @@ The application has no framework, package manager, build step, or external datab
 - e621-style search operators and metadata filters
 - Safe, questionable, and explicit ratings
 - Comments, votes, favorites, profiles, reports, and per-user API keys
+- Public Wiki with administrator-managed GitHub Flavored Markdown articles
 - Role-based administration and moderation permissions
 - Optional registration approval, Cloudflare Turnstile, and login-gated posts
 - Local filesystem or S3-compatible media storage
@@ -29,6 +30,7 @@ The application has no framework, package manager, build step, or external datab
 - `ffmpeg` and `ffprobe`
 - `timeout` from GNU coreutils
 - `curl` CLI when using S3-compatible storage or database backups
+- Composer 2
 - A web server with front-controller routing; the repository includes an Nginx example
 - `allow_url_fopen=On` when using remote importers, Turnstile, or IP geolocation
 
@@ -41,6 +43,7 @@ The web server user must be able to create and modify files under `data/`. The s
 ```bash
 git clone https://github.com/JustLivvu/libooru.git /var/www/libooru
 cd /var/www/libooru
+composer install --no-dev --optimize-autoloader
 install -d -o www-data -g www-data -m 0750 \
   data data/uploads data/thumbs data/sessions data/site-assets
 ```
@@ -116,6 +119,7 @@ find data -type f -exec chmod 0640 {} \;
 The PHP development server is sufficient for local work:
 
 ```bash
+composer install
 mkdir -p data/uploads data/thumbs data/sessions data/site-assets
 LIBOORU_SITE_URL=http://127.0.0.1:8080 \
   php -S 127.0.0.1:8080 router.php

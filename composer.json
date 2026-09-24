@@ -1,0 +1,9 @@
+{
+    "name": "justlivvu/libooru",
+    "description": "A self-hosted image and video board",
+    "license": "MIT",
+    "require": {
+        "php": "^8.0",
+        "league/commonmark": "^2.10"
+    }
+}
