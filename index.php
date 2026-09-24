@@ -288,6 +288,22 @@ function dispatch(string $method, string $path): void
         page_discord($user);
     }
 
+    elseif ($path === '/wiki') {
+        page_wiki($user);
+    }
+
+    elseif ($path === '/wiki/new') {
+        page_wiki_edit($user, null, $method);
+    }
+
+    elseif (preg_match('#^/wiki/([a-z0-9-]+)/edit$#', $path, $m)) {
+        page_wiki_edit($user, $m[1], $method);
+    }
+
+    elseif (preg_match('#^/wiki/([a-z0-9-]+)$#', $path, $m)) {
+        page_wiki_article($user, $m[1]);
+    }
+
     elseif ($path === '/scraper') {
         page_scraper($user, $method);
     }
@@ -1026,6 +1042,179 @@ function page_terms(?array $user): void
     if ($terms === '') $terms = 'Terms of Service have not been published yet.';
     View::header('Terms of Service', $user);
     echo '<div style="max-width:800px; white-space:pre-wrap; line-height:1.6;">' . View::e($terms) . '</div>';
+    View::footer();
+}
+
+function wiki_slug(string $value): string
+{
+    $value = trim($value);
+    if (function_exists('iconv')) {
+        $transliterated = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        if (is_string($transliterated)) $value = $transliterated;
+    }
+    $value = strtolower($value);
+    $value = preg_replace('/[^a-z0-9]+/', '-', $value) ?? '';
+    return trim($value, '-');
+}
+
+function page_wiki(?array $user): void
+{
+    $pages = DB::rows(
+        'SELECT w.*, u.name AS author_name
+         FROM wiki_pages w
+         LEFT JOIN users u ON u.id = w.user_id
+         ORDER BY w.title COLLATE NOCASE ASC'
+    );
+
+    View::header('Wiki', $user, null, [
+        'description' => 'Community information and guides for ' . View::siteSetting('site_name', SITE_NAME) . '.',
+        'canonical' => View::url('/wiki'),
+        'image' => false,
+    ]);
+    View::flash();
+
+    if (Auth::isAdmin()) {
+        echo '<div class="wiki-toolbar"><a class="wiki-action" href="' . View::url('/wiki/new') . '">New article</a></div>';
+    }
+
+    if (!$pages) {
+        echo '<p class="wiki-empty">No wiki articles have been published yet.</p>';
+    } else {
+        echo '<div class="wiki-list">';
+        foreach ($pages as $page) {
+            echo '<article class="wiki-list-item">';
+            echo '<a class="wiki-list-title" href="' . View::url('/wiki/' . $page['slug']) . '">' . View::e($page['title']) . '</a>';
+            if ($page['summary'] !== '') {
+                echo '<p>' . View::e($page['summary']) . '</p>';
+            }
+            echo '<small>Updated ' . View::e(date('Y-m-d H:i', (int)$page['updated_at'])) . '</small>';
+            echo '</article>';
+        }
+        echo '</div>';
+    }
+
+    View::footer();
+}
+
+function page_wiki_article(?array $user, string $slug): void
+{
+    $page = DB::row(
+        'SELECT w.*, u.name AS author_name
+         FROM wiki_pages w
+         LEFT JOIN users u ON u.id = w.user_id
+         WHERE w.slug = ? COLLATE NOCASE',
+        [$slug]
+    );
+    if (!$page) {
+        http_response_code(404);
+        View::header('Wiki article not found', $user);
+        echo '<p>Wiki article not found.</p>';
+        View::footer();
+        return;
+    }
+
+    $description = trim((string)$page['summary']);
+    if ($description === '') {
+        $plainBody = preg_replace('/\s+/', ' ', trim((string)$page['body'])) ?? '';
+        $description = function_exists('mb_substr') ? mb_substr($plainBody, 0, 180) : substr($plainBody, 0, 180);
+    }
+    View::header((string)$page['title'], $user, null, [
+        'description' => $description,
+        'canonical' => View::url('/wiki/' . $page['slug']),
+        'image' => false,
+    ]);
+    View::flash();
+
+    echo '<article class="wiki-article">';
+    echo '<div class="wiki-article-heading"><h1>' . View::e($page['title']) . '</h1>';
+    if (Auth::isAdmin()) {
+        echo '<a class="wiki-action" href="' . View::url('/wiki/' . $page['slug'] . '/edit') . '">Edit</a>';
+    }
+    echo '</div>';
+    if ($page['summary'] !== '') echo '<p class="wiki-summary">' . View::e($page['summary']) . '</p>';
+    echo '<div class="wiki-body">' . nl2br(View::e($page['body'])) . '</div>';
+    echo '<p class="wiki-meta">Updated ' . View::e(date('Y-m-d H:i', (int)$page['updated_at']));
+    if (!empty($page['author_name'])) echo ' by ' . View::e($page['author_name']);
+    echo '</p></article>';
+    View::footer();
+}
+
+function page_wiki_edit(?array $user, ?string $slug, string $method): void
+{
+    Auth::requireAdmin();
+    $page = $slug === null ? null : DB::row('SELECT * FROM wiki_pages WHERE slug = ? COLLATE NOCASE', [$slug]);
+    if ($slug !== null && !$page) {
+        http_response_code(404);
+        View::header('Wiki article not found', $user);
+        echo '<p>Wiki article not found.</p>';
+        View::footer();
+        return;
+    }
+
+    $title = (string)($page['title'] ?? '');
+    $pageSlug = (string)($page['slug'] ?? '');
+    $summary = (string)($page['summary'] ?? '');
+    $body = (string)($page['body'] ?? '');
+    $error = '';
+
+    if ($method === 'POST') {
+        View::verifyCsrf();
+        $title = trim((string)($_POST['title'] ?? ''));
+        $pageSlug = wiki_slug((string)($_POST['slug'] ?? ''));
+        if ($pageSlug === '') $pageSlug = wiki_slug($title);
+        $summary = trim((string)($_POST['summary'] ?? ''));
+        $body = trim((string)($_POST['body'] ?? ''));
+
+        if ($title === '' || strlen($title) > 160) {
+            $error = 'Title is required and must be no longer than 160 characters.';
+        } elseif ($pageSlug === '' || strlen($pageSlug) > 120) {
+            $error = 'Enter a valid article URL no longer than 120 characters.';
+        } elseif ($pageSlug === 'new') {
+            $error = 'This article URL is reserved.';
+        } elseif (strlen($summary) > 300) {
+            $error = 'Summary must be no longer than 300 characters.';
+        } elseif ($body === '' || strlen($body) > 100000) {
+            $error = 'Content is required and must be no longer than 100,000 characters.';
+        } else {
+            $duplicate = DB::row(
+                'SELECT id FROM wiki_pages WHERE slug = ? COLLATE NOCASE AND id <> ?',
+                [$pageSlug, (int)($page['id'] ?? 0)]
+            );
+            if ($duplicate) {
+                $error = 'Another wiki article already uses this URL.';
+            }
+        }
+
+        if ($error === '') {
+            if ($page) {
+                DB::exec(
+                    'UPDATE wiki_pages SET slug = ?, title = ?, summary = ?, body = ?, user_id = ?, updated_at = unixepoch() WHERE id = ?',
+                    [$pageSlug, $title, $summary, $body, (int)$user['id'], (int)$page['id']]
+                );
+                View::setFlash('Wiki article updated.', 'ok');
+            } else {
+                DB::exec(
+                    'INSERT INTO wiki_pages (slug, title, summary, body, user_id) VALUES (?, ?, ?, ?, ?)',
+                    [$pageSlug, $title, $summary, $body, (int)$user['id']]
+                );
+                View::setFlash('Wiki article published.', 'ok');
+            }
+            Router::redirect('/wiki/' . $pageSlug);
+        }
+    }
+
+    View::header($page ? 'Edit wiki article' : 'New wiki article', $user, null, [
+        'robots' => 'noindex,nofollow',
+    ]);
+    if ($error !== '') echo '<p class="flash flash-error">' . View::e($error) . '</p>';
+    echo '<form class="wiki-editor" method="post">';
+    View::csrfField();
+    echo '<label><span>Title</span><input type="text" name="title" maxlength="160" value="' . View::e($title) . '" required autofocus></label>';
+    echo '<label><span>URL</span><div class="wiki-slug-field"><span>' . View::e(View::url('/wiki/')) . '</span><input type="text" name="slug" maxlength="120" pattern="[a-z0-9-]+" value="' . View::e($pageSlug) . '" placeholder="generated-from-title"></div></label>';
+    echo '<label><span>Summary</span><textarea name="summary" rows="3" maxlength="300" placeholder="Short description shown on the wiki list">' . View::e($summary) . '</textarea></label>';
+    echo '<label><span>Content</span><textarea name="body" rows="20" maxlength="100000" required>' . View::e($body) . '</textarea></label>';
+    echo '<div class="wiki-editor-actions"><button type="submit">' . ($page ? 'Save changes' : 'Publish article') . '</button><a href="' . View::url($page ? '/wiki/' . $page['slug'] : '/wiki') . '">Cancel</a></div>';
+    echo '</form>';
     View::footer();
 }
 

@@ -109,10 +109,12 @@ class View
         $tagsLinkClass = $relativePath === '/tags' ? ' class="navbar-current" aria-current="page"' : '';
         $commentsLinkClass = $relativePath === '/comments' ? ' class="navbar-current" aria-current="page"' : '';
         $discordLinkClass = $relativePath === '/discord' ? ' class="navbar-current" aria-current="page"' : '';
+        $wikiLinkClass = ($relativePath === '/wiki' || str_starts_with($relativePath, '/wiki/'))
+            ? ' class="navbar-current" aria-current="page"' : '';
         $favoritesLinkClass = $relativePath === '/favorites' ? ' class="navbar-current" aria-current="page"' : '';
         $sidebarToggleLabel = $showSiteHeader ? 'Filters' : 'Search';
         $isPublicPage = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && http_response_code() < 400
-            && (bool)preg_match('#^/(?:$|posts$|comments$|tags$|discord$|terms$|search-help$|post/\d+$)#', $relativePath);
+            && (bool)preg_match('#^/(?:$|posts$|comments$|tags$|discord$|wiki(?:/[a-z0-9-]+)?$|terms$|search-help$|post/\d+$)#', $relativePath);
         $robots = (string)($meta['robots'] ?? ($isPublicPage ? 'index,follow,max-image-preview:large' : 'noindex,follow'));
         $image = array_key_exists('image', $meta)
             ? (string)$meta['image']
@@ -250,6 +252,7 @@ HTML;
     <a{$uploadLinkClass} href="{$e(SITE_BASE)}/upload">Upload</a>
     <a{$tagsLinkClass} href="{$e(SITE_BASE)}/tags">Tags</a>
     <a{$commentsLinkClass} href="{$e(SITE_BASE)}/comments">Comments</a>
+    <a{$wikiLinkClass} href="{$e(SITE_BASE)}/wiki">Wiki</a>
     <a{$discordLinkClass} href="{$e(SITE_BASE)}/discord">Discord</a>
 
 HTML;

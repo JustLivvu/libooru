@@ -49,9 +49,12 @@ function page_sitemap_index(): void
 function page_sitemap_pages(): void
 {
     seoXmlHeaders();
-    $paths = ['/', '/tags', '/discord', '/search-help', '/terms'];
+    $paths = ['/', '/tags', '/wiki', '/discord', '/search-help', '/terms'];
     if (View::siteSetting('require_login_posts', '0') !== '1') {
         array_splice($paths, 1, 0, ['/posts', '/comments']);
+    }
+    foreach (DB::rows('SELECT slug FROM wiki_pages ORDER BY id ASC') as $wikiPage) {
+        $paths[] = '/wiki/' . $wikiPage['slug'];
     }
 
     echo '<?xml version="1.0" encoding="UTF-8"?>';

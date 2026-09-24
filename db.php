@@ -150,6 +150,17 @@ class DB
                 value TEXT NOT NULL DEFAULT ''
             );
 
+            CREATE TABLE IF NOT EXISTS wiki_pages (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                title      TEXT NOT NULL,
+                summary    TEXT NOT NULL DEFAULT '',
+                body       TEXT NOT NULL,
+                user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+
             CREATE TABLE IF NOT EXISTS registration_requests (
                 id                  INTEGER PRIMARY KEY AUTOINCREMENT,
                 name                TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -196,6 +207,7 @@ class DB
             CREATE INDEX IF NOT EXISTS idx_comments_recent ON comments(created_at DESC, id DESC);
             CREATE INDEX IF NOT EXISTS idx_post_reports_status_created ON post_reports(status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_registration_requests_created ON registration_requests(created_at ASC);
+            CREATE INDEX IF NOT EXISTS idx_wiki_pages_updated ON wiki_pages(updated_at DESC);
         ");
 
         // Keep unsafe content out globally. One line is one rule; tags on the
