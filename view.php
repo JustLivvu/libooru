@@ -166,7 +166,7 @@ class View
 
         echo <<<HTML
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -175,6 +175,38 @@ class View
 <meta name="robots" content="{$e($robots)}">
 <meta name="rating" content="adult">
 <meta name="theme-color" content="{$e($themeColor)}">
+<script>
+(() => {
+  const themes = ['dark', 'light', 'catppuccin', 'blue'];
+  const colors = { dark: '#09090b', light: '#fafafa', catppuccin: '#1e1e2e', blue: '#07111f' };
+  const cookieTheme = () => {
+    const match = document.cookie.match(/(?:^|; )libooru_theme=([^;]*)/);
+    if (!match) return '';
+    try { return decodeURIComponent(match[1]); } catch (_) { return ''; }
+  };
+  let theme = '';
+  try { theme = localStorage.getItem('libooru-theme') || ''; } catch (_) {}
+  if (!themes.includes(theme)) theme = cookieTheme();
+  if (!themes.includes(theme)) theme = 'dark';
+
+  const apply = (nextTheme, persist = true) => {
+    if (!themes.includes(nextTheme)) nextTheme = 'dark';
+    document.documentElement.dataset.theme = nextTheme;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = colors[nextTheme];
+    if (persist) {
+      try { localStorage.setItem('libooru-theme', nextTheme); } catch (_) {}
+      document.cookie = 'libooru_theme=' + encodeURIComponent(nextTheme)
+        + '; Max-Age=31536000; Path=/; SameSite=Lax'
+        + (location.protocol === 'https:' ? '; Secure' : '');
+    }
+    return nextTheme;
+  };
+
+  apply(theme, false);
+  window.libooruTheme = { themes, get: () => document.documentElement.dataset.theme || 'dark', set: apply };
+})();
+</script>
 <link rel="canonical" href="{$e($canonical)}">
 <link rel="icon" type="image/png" href="{$e(SITE_BASE)}/static/favicon.png?v={$faviconVersion}">
 <link rel="apple-touch-icon" href="{$e(SITE_BASE)}/static/favicon.png?v={$faviconVersion}">

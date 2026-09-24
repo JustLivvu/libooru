@@ -2794,6 +2794,21 @@ function page_settings(?array $user, string $method): void
     View::flash();
     if ($error) echo '<p class="flash flash-error">' . View::e($error) . '</p>';
 
+    echo '<section class="theme-settings">';
+    echo '<h2>Appearance</h2>';
+    echo '<label for="theme-select">Theme</label>';
+    echo '<select id="theme-select">';
+    echo '<option value="dark">Dark</option>';
+    echo '<option value="light">Light</option>';
+    echo '<option value="catppuccin">Catppuccin Mocha</option>';
+    echo '<option value="blue">Blue</option>';
+    echo '</select>';
+    echo '<p>The selected theme is saved locally in this browser.</p>';
+    echo '</section>';
+    echo '<script>(()=>{const select=document.getElementById("theme-select");if(!select)return;';
+    echo 'const theme=window.libooruTheme;select.value=theme?.get()||document.documentElement.dataset.theme||"dark";';
+    echo 'select.addEventListener("change",()=>theme?.set(select.value));})();</script>';
+
     echo '<h2>Profile</h2>';
     echo '<p><a href="' . View::url('/user/' . rawurlencode($user['name'])) . '">View your profile</a></p>';
     echo '<form method="post" enctype="multipart/form-data" class="profile-settings">';
