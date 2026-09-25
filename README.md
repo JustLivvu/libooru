@@ -127,6 +127,22 @@ LIBOORU_SITE_URL=http://127.0.0.1:8080 \
 
 Open `http://127.0.0.1:8080`. The built-in server is not intended for public deployment.
 
+### NestyDock
+
+LibreBooru can be managed directly by NestyDock without nginx or Apache. Create a
+**Custom** workspace with an empty managed project folder and use these settings:
+
+```text
+Custom runtime: PHP 8.4 + LibreBooru
+Working directory: .
+Start command: php -S "$HOST:$PORT" -t /absolute/path/to/libooru /absolute/path/to/libooru/router.php
+```
+
+Choose a free application port and leave the install/build commands empty. NestyDock
+supplies `HOST` and `PORT`, owns the PHP process, and stops it with the workspace.
+The router is required: launching only with `-t` breaks front-controller routes and
+can expose private files under `data/`.
+
 ## Configuration
 
 Static limits and defaults live in [`config.php`](config.php). Runtime settings are stored in SQLite and managed from the admin panel.
