@@ -169,6 +169,36 @@
   gap: 7px;
 }
 
+.footer-settings-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 2px 0 0;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.footer-settings-editor legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+.footer-settings-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.footer-settings-editor textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.footer-settings-editor > small {
+  color: var(--text-muted);
+}
+
 :root {
   color-scheme: dark;
   --page-right-margin: 20px;
@@ -2319,13 +2349,48 @@ body:has(.gelbooru-home) header {
   object-fit: contain;
 }
 
-footer {
-  text-align: center;
-  padding: 24px;
-  border-top: 1px solid var(--border-color);
+.site-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% - var(--page-right-margin) - 8px);
+  margin: 0 var(--page-right-margin) 16px 8px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-sidebar);
   color: var(--text-dim);
   font-size: 12px;
-  margin-top: 48px;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 16px;
+}
+
+.site-footer a {
+  color: var(--text-muted);
+}
+
+.site-footer a:hover {
+  color: var(--text-main);
+}
+
+@media (max-width: 600px) {
+  .site-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .site-footer nav {
+    justify-content: flex-start;
+  }
 }
 
 

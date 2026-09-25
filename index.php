@@ -2143,6 +2143,26 @@ function page_admin(?array $user, string $method): void
             }
             $apiEnabled = isset($_POST['api_enabled']) ? '1' : '0';
             $apiRateLimit = (string)(int)$apiRateLimitInput;
+            $footerText = trim((string)($_POST['footer_text'] ?? ''));
+            $footerLinks = trim((string)($_POST['footer_links'] ?? ''));
+            if (strlen($footerText) > 1000 || strlen($footerLinks) > 5000) {
+                View::setFlash('Footer text or link list is too long.', 'error');
+                Router::redirect('/admin', ['open' => 'site-settings']);
+            }
+            foreach (preg_split('/\R/', $footerLinks) ?: [] as $footerLinkLine) {
+                if (trim($footerLinkLine) === '') continue;
+                $footerLinkParts = array_map('trim', explode('|', $footerLinkLine, 2));
+                $footerLinkLabel = $footerLinkParts[0] ?? '';
+                $footerLinkUrl = $footerLinkParts[1] ?? '';
+                $validFooterUrl = str_starts_with($footerLinkUrl, '/')
+                    || (filter_var($footerLinkUrl, FILTER_VALIDATE_URL)
+                        && in_array(strtolower((string)parse_url($footerLinkUrl, PHP_URL_SCHEME)), ['http', 'https'], true));
+                if (count($footerLinkParts) !== 2 || $footerLinkLabel === '' || strlen($footerLinkLabel) > 80
+                    || $footerLinkUrl === '' || strlen($footerLinkUrl) > 2048 || !$validFooterUrl) {
+                    View::setFlash('Each footer link must use the format Label | /path or Label | https://example.com.', 'error');
+                    Router::redirect('/admin', ['open' => 'site-settings']);
+                }
+            }
             $availableThemes = ['dark', 'light', 'catppuccin', 'blue'];
             if (trim($customThemeCss) !== '') $availableThemes[] = 'custom';
             $defaultTheme = (string)($_POST['default_theme'] ?? 'dark');
@@ -2159,6 +2179,8 @@ function page_admin(?array $user, string $method): void
             View::setSiteSetting('custom_theme_css', $customThemeCss);
             View::setSiteSetting('api_enabled', $apiEnabled);
             View::setSiteSetting('api_rate_limit', $apiRateLimit);
+            View::setSiteSetting('footer_text', $footerText);
+            View::setSiteSetting('footer_links', $footerLinks);
             foreach (['site_logo_upload' => 'site_logo', 'site_banner_upload' => 'site_banner', 'home_header_upload' => 'home_header_image'] as $field => $setting) {
                 $oldImage = View::siteSetting($setting);
                 if (isset($_POST['clear_' . $setting])) {
@@ -2332,6 +2354,8 @@ function page_admin(?array $user, string $method): void
     $curCustomThemeCss   = View::siteSetting('custom_theme_css', '');
     $curApiEnabled       = View::siteSetting('api_enabled', '1') === '1';
     $curApiRateLimit     = min(100000, max(1, (int)View::siteSetting('api_rate_limit', '120')));
+    $curFooterText       = View::siteSetting('footer_text', '© {year} {site_name}.');
+    $curFooterLinks      = View::siteSetting('footer_links', "Posts | /posts\nTags | /tags\nWiki | /wiki\nAPI | /api-docs\nTerms | /terms");
     $customThemeConfigured = trim($curCustomThemeCss) !== '';
     $adminThemeOptions   = [
         'dark' => 'Dark',
@@ -2466,6 +2490,12 @@ CSS;
     echo '<label class="api-enabled-setting"><input type="checkbox" name="api_enabled" value="1"' . ($curApiEnabled ? ' checked' : '') . '> <span>Enable API</span></label>';
     echo '<label><span>Rate limit <small>(requests per minute for each user or IP address)</small></span><input type="number" name="api_rate_limit" min="1" max="100000" step="1" required value="' . $curApiRateLimit . '"></label>';
     echo '<a href="' . View::url('/api-docs') . '">Open API documentation</a>';
+    echo '</fieldset>';
+    echo '<fieldset class="footer-settings-editor">';
+    echo '<legend>Footer</legend>';
+    echo '<label><span>Footer text <small>(supports {year} and {site_name})</small></span><textarea name="footer_text" rows="3" maxlength="1000" placeholder="© {year} {site_name}.">' . View::e($curFooterText) . '</textarea></label>';
+    echo '<label><span>Footer links <small>(one per line: Label | URL)</small></span><textarea name="footer_links" rows="6" maxlength="5000" spellcheck="false" placeholder="Terms | /terms&#10;GitHub | https://github.com/example/repository">' . View::e($curFooterLinks) . '</textarea></label>';
+    echo '<small>Internal links must begin with <code>/</code>. The footer is hidden on the homepage.</small>';
     echo '</fieldset>';
     echo '<label style="display:flex; flex-direction:column; gap:5px;"><span>Navbar logo <small>(saved locally)</small></span><input type="file" name="site_logo_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label>';
     if ($curLogo) echo '<label><input type="checkbox" name="clear_site_logo"> Remove current navbar logo</label>';

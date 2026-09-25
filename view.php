@@ -423,9 +423,39 @@ HTML;
 
     public static function footer(): void
     {
+        $requestPath = (string)(parse_url((string)($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/');
+        $relativePath = SITE_BASE !== '' && str_starts_with($requestPath, SITE_BASE)
+            ? (substr($requestPath, strlen(SITE_BASE)) ?: '/')
+            : $requestPath;
+        $footer = '';
+        if ($relativePath !== '/') {
+            $siteName = self::siteSetting('site_name', SITE_NAME);
+            $footerText = self::siteSetting('footer_text', '© {year} {site_name}.');
+            $footerText = str_replace(['{year}', '{site_name}'], [date('Y'), $siteName], $footerText);
+            $linksSetting = self::siteSetting(
+                'footer_links',
+                "Posts | /posts\nTags | /tags\nWiki | /wiki\nAPI | /api-docs\nTerms | /terms"
+            );
+            $links = [];
+            foreach (preg_split('/\R/', $linksSetting) ?: [] as $line) {
+                $parts = array_map('trim', explode('|', $line, 2));
+                if (count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') continue;
+                [$label, $url] = $parts;
+                $external = preg_match('#^https?://#i', $url) === 1;
+                if (!$external && !str_starts_with($url, '/')) continue;
+                if ($external && !filter_var($url, FILTER_VALIDATE_URL)) continue;
+                $href = $external ? $url : self::url($url);
+                $links[] = '<a href="' . self::e($href) . '"' . ($external ? ' rel="noopener noreferrer"' : '') . '>' . self::e($label) . '</a>';
+            }
+            $textHtml = nl2br(self::e($footerText), false);
+            $linksHtml = $links ? '<nav aria-label="Footer navigation">' . implode('', $links) . '</nav>' : '';
+            $footer = '<footer class="site-footer"><p>' . $textHtml . '</p>' . $linksHtml . '</footer>';
+        }
+
         echo <<<HTML
 </main>
 </div>
+{$footer}
 </body>
 </html>
 HTML;
